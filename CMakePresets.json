@@ -1,0 +1,25 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows x64 Release",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/.build",
+      "architecture": "x64"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc-release",
+      "configuration": "Release",
+      "jobs": 4
+    }
+  ]
+}

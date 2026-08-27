@@ -1,0 +1,3 @@
+#pragma once
+
+#define MIANA_PACKAGE_VERSION L"@PROJECT_VERSION@"

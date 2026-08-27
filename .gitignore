@@ -1,0 +1,39 @@
+# CMake and build output
+.build/
+.build-*/
+.package-build/
+.zstd/
+build/
+out/
+dist/
+release/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+*.user
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.lastbuildstate
+*.VC.db
+*.suo
+
+# Runtime and local data
+data.json
+data.json.*
+*.log
+*.tmp
+*.bak
+*.dmp
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~

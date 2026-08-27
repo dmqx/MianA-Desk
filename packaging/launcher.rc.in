@@ -1,0 +1,2 @@
+1 ICON "@package_icon@"
+101 RCDATA "@package_payload@"

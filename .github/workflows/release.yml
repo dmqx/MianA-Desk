@@ -1,0 +1,69 @@
+name: Build Windows package
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Configure application
+        run: cmake --preset windows-msvc-release
+
+      - name: Build application
+        run: cmake --build --preset windows-msvc-release
+
+      - name: Deploy application
+        run: cmake --install .build --config Release --prefix dist/package
+
+      - name: Configure single-file packager
+        run: >-
+          cmake -S packaging -B .package-build
+          -G "Visual Studio 17 2022" -A x64
+          -DMIANA_DIST_DIR="${{ github.workspace }}/dist/package"
+
+      - name: Build single-file package
+        run: cmake --build .package-build --config Release --target MianADeskPackage --parallel
+
+      - name: Stage artifact
+        shell: powershell
+        run: Copy-Item ".package-build/Release/MianA Desk.exe" "dist/MianA-Desk-${{ github.ref_name }}.exe"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MianA-Desk-${{ github.ref_name }}
+          path: dist/MianA-Desk-${{ github.ref_name }}.exe
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ github.ref_name }}"
+          "dist/MianA-Desk-${{ github.ref_name }}.exe"
+          --title "MianA Desk ${{ github.ref_name }}"
+          --generate-notes 2>$null
+          || gh release upload "${{ github.ref_name }}"
+          "dist/MianA-Desk-${{ github.ref_name }}.exe" --clobber
