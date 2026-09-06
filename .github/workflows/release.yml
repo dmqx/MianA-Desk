@@ -1,3 +1,4 @@
+# MianA Desk v1.1 release workflow
 name: Build Windows package
 
 on:

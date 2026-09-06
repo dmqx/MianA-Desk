@@ -35,6 +35,7 @@ qt_add_qml_module(MianADesk
         qml/windows/SettingsWindow.qml
         qml/components/FlatButton.qml
         qml/components/PositionCard.qml
+        qml/components/CompactCard.qml
         qml/components/TitleButton.qml
         qml/components/NeutralButton.qml
     RESOURCES assets/miana_desk.ico assets/miana_desk.png

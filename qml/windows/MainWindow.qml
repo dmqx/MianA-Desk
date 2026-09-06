@@ -45,7 +45,7 @@ ColumnLayout {
             Label { text: "自选"; color: view.controller.paletteMuted; font.pixelSize: 12; font.bold: true; Layout.alignment: Qt.AlignVCenter }
             Label { text: view.controller.count; color: view.controller.paletteHint; font.pixelSize: 12; Layout.alignment: Qt.AlignVCenter }
             Item { Layout.fillWidth: true }
-            Components.FlatButton { controller: view.controller; text: "↻"; font.family: "Segoe UI Symbol"; font.pixelSize: 10; font.bold: true; Layout.alignment: Qt.AlignVCenter; onClicked: view.controller.manualRefresh() }
+            Components.FlatButton { controller: view.controller; text: "↻"; font.family: "Segoe UI Symbol"; font.pixelSize: 12; font.bold: true; Layout.alignment: Qt.AlignVCenter; onClicked: view.controller.manualRefresh() }
             Components.FlatButton { controller: view.controller; text: "＋ 添加"; font.pixelSize: 10; font.bold: true; Layout.alignment: Qt.AlignVCenter; onClicked: view.addRequested() }
         }
     }
@@ -60,11 +60,15 @@ ColumnLayout {
         property string dragSymbol: ""
         property string dragPrice: ""
         property bool dragHasError: false
+        property double dragChangePercent: 0.0
+        property double dragPreviousClose: 0.0
+        property bool dragHasChange: false
+        property var dragIntraday: []
 
         function updateDragTarget(viewportY) {
             if (dragSource < 0 || view.controller.count <= 0)
                 return
-            const rowExtent = 55 + spacing
+            const rowExtent = (view.controller.showIntraday ? 84 : 55) + spacing
             const contentPointY = contentY + Math.max(0, Math.min(height - 1, viewportY))
             dragDestination = Math.max(0, Math.min(view.controller.count - 1,
                                                    Math.floor(contentPointY / rowExtent)))
@@ -144,6 +148,10 @@ ColumnLayout {
                 list.dragSymbol = card.symbol
                 list.dragPrice = card.priceText
                 list.dragHasError = card.hasError
+                list.dragChangePercent = card.changePercent
+                list.dragPreviousClose = card.previousClose
+                list.dragHasChange = card.hasChange
+                list.dragIntraday = card.intraday
             }
             onDragMoved: function(localY) {
                 const point = card.mapToItem(list, card.width / 2, localY)
@@ -177,6 +185,10 @@ ColumnLayout {
             name: list.dragName
             priceText: list.dragPrice
             hasError: list.dragHasError
+            changePercent: list.dragChangePercent
+            previousClose: list.dragPreviousClose
+            hasChange: list.dragHasChange
+            intraday: list.dragIntraday
             reorderActive: true
             opacity: visible ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }

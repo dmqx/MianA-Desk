@@ -30,8 +30,11 @@ class AppController final : public QObject {
   Q_PROPERTY(bool autoTheme READ autoTheme NOTIFY stateChanged)
   Q_PROPERTY(bool minimizeToTray READ minimizeToTray NOTIFY stateChanged)
   Q_PROPERTY(bool autostart READ autostart NOTIFY stateChanged)
+  Q_PROPERTY(bool showIntraday READ showIntraday NOTIFY stateChanged)
+  Q_PROPERTY(bool hideStockCode READ hideStockCode NOTIFY stateChanged)
   Q_PROPERTY(QString themeColor READ themeColor NOTIFY stateChanged)
-  Q_PROPERTY(int themeOpacity READ themeOpacity NOTIFY stateChanged)
+  Q_PROPERTY(int frameOpacity READ frameOpacity NOTIFY stateChanged)
+  Q_PROPERTY(int textOpacity READ textOpacity NOTIFY stateChanged)
   Q_PROPERTY(QString paletteBg READ paletteBg NOTIFY paletteChanged)
   Q_PROPERTY(QString palettePanel READ palettePanel NOTIFY paletteChanged)
   Q_PROPERTY(QString paletteHover READ paletteHover NOTIFY paletteChanged)
@@ -39,7 +42,11 @@ class AppController final : public QObject {
   Q_PROPERTY(QString paletteText READ paletteText NOTIFY paletteChanged)
   Q_PROPERTY(QString paletteMuted READ paletteMuted NOTIFY paletteChanged)
   Q_PROPERTY(QString paletteHint READ paletteHint NOTIFY paletteChanged)
+  Q_PROPERTY(QString paletteUp READ paletteUp NOTIFY paletteChanged)
+  Q_PROPERTY(QString paletteDown READ paletteDown NOTIFY paletteChanged)
+  Q_PROPERTY(QString paletteWarning READ paletteWarning NOTIFY paletteChanged)
   Q_PROPERTY(QString focusedSymbol READ focusedSymbol NOTIFY focusChanged)
+  Q_PROPERTY(QString focusedName READ focusedName NOTIFY focusChanged)
   Q_PROPERTY(QString focusedPrice READ focusedPrice NOTIFY focusChanged)
 
 public:
@@ -59,8 +66,11 @@ public:
   bool autoTheme() const;
   bool minimizeToTray() const;
   bool autostart() const;
+  bool showIntraday() const;
+  bool hideStockCode() const;
   QString themeColor() const;
-  int themeOpacity() const;
+  int frameOpacity() const;
+  int textOpacity() const;
   QString paletteBg() const;
   QString palettePanel() const;
   QString paletteHover() const;
@@ -68,7 +78,11 @@ public:
   QString paletteText() const;
   QString paletteMuted() const;
   QString paletteHint() const;
+  QString paletteUp() const;
+  QString paletteDown() const;
+  QString paletteWarning() const;
   QString focusedSymbol() const;
+  QString focusedName() const;
   QString focusedPrice() const;
 
 public slots:
@@ -83,10 +97,12 @@ public slots:
   void showFull();
   void toggleFloatingAndShow();
   void setAutostart(bool enabled);
-  void previewAppearance(bool autoTheme, const QString &color, int opacity);
+  void previewAppearance(bool autoTheme, const QString &color, int frameOpacity,
+                         int textOpacity);
   void toggle(const QString &key);
   bool saveSettings(bool paused, bool floating, bool tray, bool autostart,
-                    bool autoTheme, const QString &color, int opacity);
+                    bool showIntraday, bool hideStockCode, bool autoTheme,
+                    const QString &color, int frameOpacity, int textOpacity);
   void initialRefresh();
   void manualRefresh();
   void refreshQuotes(bool force = false);
@@ -108,16 +124,21 @@ private:
   struct Appearance {
     bool automatic;
     QString color;
-    int opacity;
+    int frameOpacity;
+    int textOpacity;
   };
   [[nodiscard]] const Position *focused() const;
   [[nodiscard]] QHash<QString, QString> palette() const;
   [[nodiscard]] QString marketSummary() const;
+  static QTimeZone marketTimeZone(const QString &market);
   void setStatus(const QString &text, const QString &color);
   bool saveStore();
   void scheduleSave();
+  void maybeRefreshOnScheduleChange();
   void requestRefresh(bool force, bool showProgress);
   void applyQuoteBatch(int batchId, const QVector<QuoteResult> &results);
+  void refreshIntradayHistory();
+  void applyIntradayBatch(int batchId, const QVector<IntradayResult> &results);
   void syncTray();
 
   WindowManager &m_windows;
@@ -136,6 +157,9 @@ private:
   int m_nextBatchId = 0;
   QHash<QString, int> m_lastResultBatch;
   QHash<QString, int> m_lastSuccessBatch;
+  QHash<QString, int> m_lastIntradayBatch;
+  QHash<QString, QDate> m_closedRefreshDates;
+  QHash<QString, QDate> m_breakRefreshDates;
   bool m_pendingRefresh = false;
   bool m_pendingForce = false;
   bool m_pendingProgress = false;

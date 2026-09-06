@@ -25,6 +25,7 @@ public:
   bool acquireSingleInstance();
   void initializeTray(AppController *controller);
   void watchWindow(QWindow *window);
+  void refreshWindowStyle();
   void setTrayState(bool floating, bool paused, bool autostart);
 
   [[nodiscard]] bool autostartEnabled() const;

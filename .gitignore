@@ -1,4 +1,4 @@
-# CMake and build output
+# MianA Desk v1.1 CMake and build output
 .build/
 .build-*/
 .package-build/

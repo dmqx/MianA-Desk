@@ -21,11 +21,25 @@ QVariant PositionModel::data(const QModelIndex &index, int role) const {
   case NameRole:
     return item.name;
   case PriceTextRole:
-    return item.price > 0.0 ? moneySymbol(item.currency) +
-                                  formatPrice(item.price, item.precision)
+    return item.price > 0.0 ? formatPrice(item.price, item.precision)
                             : QStringLiteral("--");
   case ErrorRole:
     return !item.error.isEmpty();
+  case PriceRole:
+    return item.price;
+  case ChangePercentRole:
+    return item.changePercent;
+  case PreviousCloseRole:
+    return item.previousClose;
+  case HasChangeRole:
+    return item.hasChange;
+  case IntradayRole: {
+    QVariantList points;
+    points.reserve(item.intraday.size());
+    for (const double value : item.intraday)
+      points.append(value);
+    return points;
+  }
   default:
     return {};
   }
@@ -34,9 +48,12 @@ QVariant PositionModel::data(const QModelIndex &index, int role) const {
 QHash<int, QByteArray> PositionModel::roleNames() const {
   return {{IdRole, "positionId"},  {SymbolRole, "symbol"},
           {NameRole, "name"},      {PriceTextRole, "priceText"},
-          {ErrorRole, "hasError"}};
+          {ErrorRole, "hasError"},  {PriceRole, "price"},
+          {ChangePercentRole, "changePercent"},
+          {PreviousCloseRole, "previousClose"},
+          {HasChangeRole, "hasChange"},
+          {IntradayRole, "intraday"}};
 }
-
 const QVector<Position> &PositionModel::positions() const noexcept {
   return m_positions;
 }
@@ -100,17 +117,6 @@ void PositionModel::notifyPosition(const QString &id, const QList<int> &roles) {
     emit dataChanged(index(row), index(row), roles);
 }
 
-QString PositionModel::moneySymbol(const QString &currency) {
-  if (currency == QStringLiteral("CNY"))
-    return QStringLiteral("¥ ");
-  if (currency == QStringLiteral("USD"))
-    return QStringLiteral("$ ");
-  if (currency == QStringLiteral("HKD"))
-    return QStringLiteral("HK$ ");
-  if (currency == QStringLiteral("JPY"))
-    return QStringLiteral("JP¥ ");
-  return currency + QLatin1Char(' ');
-}
 QString PositionModel::formatPrice(double value, int precision) {
   return QLocale(QLocale::English, QLocale::UnitedStates)
       .toString(value, 'f', std::clamp(precision, 0, 6));

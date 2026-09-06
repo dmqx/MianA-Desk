@@ -22,6 +22,7 @@
 #include <QSystemTrayIcon>
 #include <QTimer>
 #include <QUrl>
+#include <QVariant>
 #include <QWindow>
 
 #ifdef Q_OS_WIN
@@ -52,7 +53,6 @@ const QString InstanceId = QStringLiteral("MianADesk.Qt.Cpp.v2");
 const QString RunKey = QStringLiteral(
     "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
 const QString AppRegistryId = QStringLiteral("MianADesk");
-const QString LegacyRegistryId = QStringLiteral("StockDeskWidget");
 
 class CompactTrayMenuStyle final : public QProxyStyle {
 public:
@@ -271,7 +271,7 @@ void WindowManager::initializeTray(AppController *controller) {
   connect(m_tray, &QSystemTrayIcon::activated, controller,
           [controller](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger)
-              controller->showFull();
+              controller->showMainRequested();
           });
   m_trayActions.insert(QStringLiteral("floating"), floating);
   m_trayActions.insert(QStringLiteral("paused"), paused);
@@ -293,6 +293,12 @@ void WindowManager::watchWindow(QWindow *window) {
   window->installEventFilter(this);
   if (window->isVisible())
     scheduleDwm(window);
+}
+
+void WindowManager::refreshWindowStyle() {
+  for (const auto &window : std::as_const(m_windows))
+    if (window)
+      scheduleDwm(window);
 }
 
 void WindowManager::setTrayState(bool floating, bool paused, bool autostart) {
@@ -322,8 +328,7 @@ void WindowManager::showUpdateNotification(const QString &tagName,
 bool WindowManager::autostartEnabled() const {
 #ifdef Q_OS_WIN
   QSettings settings(RunKey, QSettings::NativeFormat);
-  return !settings.value(AppRegistryId).toString().isEmpty() ||
-         !settings.value(LegacyRegistryId).toString().isEmpty();
+  return !settings.value(AppRegistryId).toString().isEmpty();
 #else
   return false;
 #endif
@@ -340,10 +345,8 @@ bool WindowManager::setAutostart(bool enabled) {
         AppRegistryId,
         QStringLiteral("\"") + QDir::toNativeSeparators(executable) +
             QStringLiteral("\""));
-    settings.remove(LegacyRegistryId);
   } else {
     settings.remove(AppRegistryId);
-    settings.remove(LegacyRegistryId);
   }
   settings.sync();
   return settings.status() == QSettings::NoError;
@@ -514,8 +517,27 @@ void WindowManager::applyDwm(QWindow *window) {
     return;
   const bool positionMenu =
       window->objectName() == QStringLiteral("positionMenu");
-  const int ncRendering = positionMenu ? DWMNCRP_DISABLED : DWMNCRP_ENABLED;
-  // DWMWCP_ROUND is Windows' larger standard rounded-corner treatment.
+  const bool floating = window->property("floatingMode").toBool();
+  if (floating) {
+    const int ncRendering = DWMNCRP_DISABLED;
+    const int noRound = 1;
+    DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &ncRendering,
+                          sizeof(ncRendering));
+    DwmSetWindowAttribute(hwnd, 33, &noRound, sizeof(noRound));
+    const MARGINS margins{0, 0, 0, 0};
+    DwmExtendFrameIntoClientArea(hwnd, &margins);
+    applyNativeWindowStyle(window);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOACTIVATE | SWP_NOZORDER);
+    return;
+  }
+  // Respect Qt::FramelessWindowHint instead of forcing DWM to paint a
+  // non-client strip above the custom QML title bar. The one-pixel frame
+  // extension below is kept so the main and compact windows retain their
+  // native DWM shadow.
+  const int ncRendering = positionMenu ? DWMNCRP_DISABLED
+                                       : DWMNCRP_USEWINDOWSTYLE;
   const int rounded = 2;
   const int backdropNone = 1;
   const COLORREF noColor = 0xFFFFFFFE;

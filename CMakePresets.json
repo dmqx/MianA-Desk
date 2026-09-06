@@ -9,6 +9,7 @@
     {
       "name": "windows-msvc-release",
       "displayName": "Windows x64 Release",
+      "description": "MianA Desk v1.1",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/.build",
       "architecture": "x64"

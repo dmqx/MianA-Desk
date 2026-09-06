@@ -17,4 +17,5 @@ signals:
 
 private:
   QNetworkAccessManager m_network;
+  bool m_checking = false;
 };

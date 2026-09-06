@@ -4,7 +4,6 @@ import QtQuick.Controls.Basic as Basic
 Basic.Button {
     id: control
     required property var controller
-    property bool active: false
     implicitHeight: 26
     padding: 4
     flat: true
@@ -15,7 +14,7 @@ Basic.Button {
     font.pixelSize: 9
     contentItem: Text {
         text: control.text
-        color: control.active ? "#0A84FF" : control.controller.paletteMuted
+        color: control.controller.paletteMuted
         font: control.font
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

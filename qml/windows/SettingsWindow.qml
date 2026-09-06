@@ -12,7 +12,7 @@ Window {
     required property var controller
     required property var mainWindow
     readonly property int pageWidth: 288
-    readonly property int pageHeight: 440
+    readonly property int pageHeight: 538
     readonly property int titleBarHeight: 40
     width: pageWidth
     height: pageHeight
@@ -21,7 +21,7 @@ Window {
     visible: false
     title: "设置"
     color: "transparent"
-    flags: Qt.FramelessWindowHint | Qt.Tool
+    flags: Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint | Qt.Tool
     modality: Qt.NonModal
     transientParent: mainWindow
 
@@ -69,6 +69,42 @@ Window {
         }
     }
 
+    component AppearanceSlider: Basic.Slider {
+        id: control
+        from: 10
+        to: 100
+        stepSize: 1
+        focusPolicy: Qt.NoFocus
+        background: Rectangle {
+            x: control.leftPadding
+            y: control.topPadding + (control.availableHeight - height) / 2
+            implicitWidth: 120
+            implicitHeight: 4
+            width: control.availableWidth
+            height: implicitHeight
+            radius: height / 2
+            color: settings.controller.paletteLine
+            Rectangle {
+                width: control.visualPosition * parent.width
+                height: parent.height
+                radius: parent.radius
+                color: settings.textColor
+            }
+        }
+        handle: Rectangle {
+            x: control.leftPadding + control.visualPosition * (control.availableWidth - width)
+            y: control.topPadding + (control.availableHeight - height) / 2
+            implicitWidth: 16
+            implicitHeight: 16
+            radius: width / 2
+            // The track is behind the handle. Keep the same theme RGB but
+            // make the handle opaque so low panel opacity cannot reveal it.
+            color: Qt.rgba(settings.bg.r, settings.bg.g, settings.bg.b, 1)
+            border.width: 2
+            border.color: settings.textColor
+        }
+    }
+
     function openForSettings() {
         show()
         raise()
@@ -78,27 +114,48 @@ Window {
     function applySettings() {
         if (initializing)
             return
-        settings.controller.saveSettings(paused.checked, floating.checked,
-            tray.checked, autostart.checked, autoTheme.checked,
-            themeColor.text, Math.round(opacitySlider.value))
+        const saved = settings.controller.saveSettings(paused.checked, floating.checked,
+            tray.checked, autostart.checked, showIntraday.checked,
+            hideStockCode.checked, autoTheme.checked, themeColor.text,
+            Math.round(frameOpacitySlider.value),
+            Math.round(textOpacitySlider.value))
+        if (!saved)
+            syncFromController()
     }
 
     function closeSettings() {
-        applySettings()
+        if (visible)
+            applySettings()
         hide()
+    }
+
+    Connections {
+        target: settings.controller
+        function onStateChanged() {
+            if (!settings.visible || settings.initializing)
+                return
+            settings.syncFromController()
+        }
+    }
+
+    function syncFromController() {
+        initializing = true
+        paused.checked = controller.paused
+        floating.checked = controller.floating
+        tray.checked = controller.minimizeToTray
+        autostart.checked = controller.autostart
+        showIntraday.checked = controller.showIntraday
+        hideStockCode.checked = controller.hideStockCode
+        autoTheme.checked = controller.autoTheme
+        themeColor.text = controller.themeColor
+        frameOpacitySlider.value = controller.frameOpacity
+        textOpacitySlider.value = controller.textOpacity
+        initializing = false
     }
 
     onVisibleChanged: {
         if (visible) {
-            initializing = true
-            paused.checked = settings.controller.paused
-            floating.checked = settings.controller.floating
-            tray.checked = settings.controller.minimizeToTray
-            autostart.checked = settings.controller.autostart
-            autoTheme.checked = settings.controller.autoTheme
-            themeColor.text = settings.controller.themeColor
-            opacitySlider.value = settings.controller.themeOpacity
-            initializing = false
+            syncFromController()
             const desiredX = mainWindow.x + (mainWindow.width - width) / 2
             const desiredY = mainWindow.y + 30
             x = Math.max(Screen.virtualX + 8, Math.min(desiredX, Screen.virtualX + Screen.desktopAvailableWidth - width - 8))
@@ -184,42 +241,25 @@ Window {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 25
-                        Label { text: "透明度 " + Math.round(opacitySlider.value) + "%"; color: settings.textColor; Layout.preferredWidth: 100 }
-                        Basic.Slider {
-                            id: opacitySlider
-                            from: 40
-                            to: 95
-                            stepSize: 1
-                            focusPolicy: Qt.NoFocus
+                        Label { text: "面板透明度 " + Math.round(frameOpacitySlider.value) + "%"; color: settings.textColor; Layout.preferredWidth: 128 }
+                        AppearanceSlider {
+                            id: frameOpacitySlider
                             Layout.fillWidth: true
-                            onMoved: settings.controller.previewAppearance(autoTheme.checked, themeColor.text, Math.round(value))
+                            onMoved: settings.controller.previewAppearance(autoTheme.checked, themeColor.text,
+                                Math.round(value), Math.round(textOpacitySlider.value))
                             onPressedChanged: if (!pressed && !settings.initializing) settings.applySettings()
-                            background: Rectangle {
-                                x: opacitySlider.leftPadding
-                                y: opacitySlider.topPadding + (opacitySlider.availableHeight - height) / 2
-                                implicitWidth: 120
-                                implicitHeight: 4
-                                width: opacitySlider.availableWidth
-                                height: implicitHeight
-                                radius: height / 2
-                                color: settings.controller.paletteLine
-                                Rectangle {
-                                    width: opacitySlider.visualPosition * parent.width
-                                    height: parent.height
-                                    radius: parent.radius
-                                    color: settings.textColor
-                                }
-                            }
-                            handle: Rectangle {
-                                x: opacitySlider.leftPadding + opacitySlider.visualPosition * (opacitySlider.availableWidth - width)
-                                y: opacitySlider.topPadding + (opacitySlider.availableHeight - height) / 2
-                                implicitWidth: 16
-                                implicitHeight: 16
-                                radius: width / 2
-                                color: settings.bg
-                                border.width: 2
-                                border.color: settings.textColor
-                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 25
+                        Label { text: "字体透明度 " + Math.round(textOpacitySlider.value) + "%"; color: settings.textColor; Layout.preferredWidth: 128 }
+                        AppearanceSlider {
+                            id: textOpacitySlider
+                            Layout.fillWidth: true
+                            onMoved: settings.controller.previewAppearance(autoTheme.checked, themeColor.text,
+                                Math.round(frameOpacitySlider.value), Math.round(value))
+                            onPressedChanged: if (!pressed && !settings.initializing) settings.applySettings()
                         }
                     }
                     CompactCheckBox {
@@ -251,8 +291,10 @@ Window {
                         Label { text: "常规"; color: settings.textColor; font.bold: true }
                         Item { Layout.fillWidth: true }
                     }
+                    CompactCheckBox { Layout.preferredHeight: 25; id: showIntraday; text: "展示分时图"; onToggled: settings.applySettings() }
+                    CompactCheckBox { Layout.preferredHeight: 25; id: hideStockCode; text: "隐藏股票代码"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: paused; text: "暂停行情刷新"; onToggled: settings.applySettings() }
-                    CompactCheckBox { Layout.preferredHeight: 25; id: floating; text: "使用可自由移动的迷你浮窗"; onToggled: settings.applySettings() }
+                    CompactCheckBox { Layout.preferredHeight: 25; id: floating; text: "自由浮窗模式"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: autostart; text: "Windows 开机自动启动"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: tray; text: "关闭时最小化到系统托盘"; onToggled: settings.applySettings() }
                 }
@@ -422,7 +464,8 @@ Window {
                     enabled: colorField.acceptableInput
                     onClicked: {
                         themeColor.text = colorField.text.toUpperCase()
-                        settings.controller.previewAppearance(autoTheme.checked, themeColor.text, Math.round(opacitySlider.value))
+                        settings.controller.previewAppearance(autoTheme.checked, themeColor.text,
+                            Math.round(frameOpacitySlider.value), Math.round(textOpacitySlider.value))
                         settings.applySettings()
                         colorPopup.close()
                     }

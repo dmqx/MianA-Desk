@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QDate>
 #include <QString>
 #include <QVector>
 
@@ -17,6 +18,13 @@ struct Position {
   QString source;
   int failureCount = 0;
   double retryAfter = 0.0;
+  double changePercent = 0.0;
+  double previousClose = 0.0;
+  bool hasChange = false;
+  QVector<double> intraday;
+  qint64 intradayMinute = 0;
+  QVector<qint64> intradayMinutes;
+  QDate intradayDate;
 };
 
 class PositionModel final : public QAbstractListModel {
@@ -27,7 +35,12 @@ public:
     SymbolRole,
     NameRole,
     PriceTextRole,
-    ErrorRole
+    ErrorRole,
+    PriceRole,
+    ChangePercentRole,
+    PreviousCloseRole,
+    HasChangeRole,
+    IntradayRole
   };
   Q_ENUM(Role)
 
@@ -49,7 +62,6 @@ public:
                                     const QString &exceptId = {}) const;
   void notifyPosition(const QString &id, const QList<int> &roles = {});
 
-  static QString moneySymbol(const QString &currency);
   static QString formatPrice(double value, int precision);
 
 private:

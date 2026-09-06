@@ -12,8 +12,8 @@ Window {
     required property var controller
     required property var mainWindow
     property string editingId: ""
-    readonly property int pageWidth: 248
-    readonly property int pageHeight: 260
+    readonly property int pageWidth: 232
+    readonly property int pageHeight: 222
     readonly property int titleBarHeight: 40
     readonly property color inputBorderColor: "#A6A6A6"
     readonly property color inputFocusBorderColor: "#707A82"
@@ -22,7 +22,8 @@ Window {
     color: "transparent"
     modality: Qt.ApplicationModal
     transientParent: mainWindow
-    flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint
+    flags: Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint
+        | Qt.Tool | Qt.WindowStaysOnTopHint
     width: pageWidth
     height: pageHeight
 
@@ -111,25 +112,24 @@ Window {
             DragHandler { target: null; onActiveChanged: if (active) dialog.startSystemMove() }
         }
 
-        Item { Layout.preferredHeight: 8 }
+        Item { Layout.preferredHeight: 6 }
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 158
+            Layout.preferredHeight: 126
             radius: 8
             color: dialog.controller.palettePanel
             ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 11
-                anchors.topMargin: 11
-                anchors.bottomMargin: 11
+                anchors.topMargin: 8
+                anchors.bottomMargin: 8
                 spacing: 4
                 Label { text: "股票代码"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 12; font.bold: true }
                 Basic.TextField {
                     id: symbolField
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    placeholderText: "例如 600519、0700.HK、AAPL"
                     placeholderTextColor: dialog.controller.paletteHint
                     color: dialog.controller.paletteText
                     font.family: "Microsoft YaHei UI"
@@ -147,12 +147,11 @@ Window {
                     }
                     onAccepted: dialog.submit()
                 }
-                Label { text: "股票名称"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 12; font.bold: true }
+                Label { text: "股票名称"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 12; font.bold: true; Layout.topMargin: 4 }
                 Basic.TextField {
                     id: nameField
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    placeholderText: "可留空，刷新后自动补全"
                     placeholderTextColor: dialog.controller.paletteHint
                     color: dialog.controller.paletteText
                     font.family: "Microsoft YaHei UI"
@@ -170,11 +169,11 @@ Window {
                     }
                     onAccepted: dialog.submit()
                 }
-                Label { id: errorText; color: "#E88B00"; visible: text.length > 0; Layout.fillWidth: true; font.pixelSize: 10; elide: Text.ElideRight }
+                Label { id: errorText; color: dialog.controller.paletteWarning; visible: text.length > 0; Layout.fillWidth: true; font.pixelSize: 10; elide: Text.ElideRight }
             }
         }
 
-        Item { Layout.fillHeight: true }
+        Item { Layout.preferredHeight: 6 }
         RowLayout {
             Layout.fillWidth: true
             Item { Layout.fillWidth: true }

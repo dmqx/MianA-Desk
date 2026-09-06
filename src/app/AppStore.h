@@ -12,12 +12,15 @@ struct AppSettings {
   bool locked = false;
   bool compact = false;
   bool floating = false;
+  bool showIntraday = true;
+  bool hideStockCode = false;
   QString focusId;
   bool paused = false;
   bool minimizeToTray = true;
   bool autoTheme = false;
   QString themeColor = QStringLiteral("#FFFFFF");
-  int themeOpacity = 95;
+  int frameOpacity = 95;
+  int textOpacity = 95;
 };
 
 class AppStore final {
@@ -29,6 +32,7 @@ public:
 
 private:
   static QString dataPath();
+  bool backupInvalidData(const QString &reason);
   static Position parsePosition(const QJsonObject &object, bool &valid);
   QString m_path;
   QString m_loadError;

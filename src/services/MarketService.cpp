@@ -7,7 +7,9 @@
 #include <QRegularExpression>
 #include <QTimeZone>
 #include <QUrl>
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -22,6 +24,7 @@ struct MarketService::Pending {
   QVector<Provider> providers;
   int providerIndex = 0;
   bool inFlight = false;
+  bool completed = false;
   QStringList errors;
 };
 struct MarketService::Batch {
@@ -46,6 +49,13 @@ QString providerName(MarketService::Provider provider) {
     return QStringLiteral("Yahoo");
   }
   return {};
+}
+QString yahooSymbol(QString symbol) {
+  if (symbol.endsWith(QStringLiteral(".US"))) {
+    symbol.chop(3);
+    symbol.replace(QLatin1Char('.'), QLatin1Char('-'));
+  }
+  return symbol;
 }
 QString chinaQuerySymbol(const QString &symbol) {
   const QString code = symbol.section(QLatin1Char('.'), 0, 0);
@@ -102,7 +112,9 @@ QString decodeChinesePayload(const QByteArray &body) {
 } // namespace
 
 MarketService::MarketService(QObject *parent)
-    : QObject(parent), m_network(this) {}
+    : QObject(parent), m_network(this) {
+  requestCnTradingCalendar();
+}
 
 QString MarketService::normalizeSymbol(const QString &raw) {
   QString value = raw.trimmed().toUpper();
@@ -115,6 +127,18 @@ QString MarketService::normalizeSymbol(const QString &raw) {
   for (const auto &[from, to] : suffixes)
     if (value.endsWith(from))
       return value.left(value.size() - from.size()) + to;
+  if (value.endsWith(QStringLiteral(".SS")) ||
+      value.endsWith(QStringLiteral(".SZ")) ||
+      value.endsWith(QStringLiteral(".BJ")) ||
+      value.endsWith(QStringLiteral(".HK")) ||
+      value.endsWith(QStringLiteral(".US")))
+    return value;
+  static const QRegularExpression usTicker(
+      QStringLiteral("^[A-Z][A-Z0-9]*([.-][A-Z0-9]+)?$"));
+  if (usTicker.match(value).hasMatch()) {
+    value.replace(QLatin1Char('-'), QLatin1Char('.'));
+    return value + QStringLiteral(".US");
+  }
   if (value.contains(QLatin1Char('.')) || value.contains(QLatin1Char('=')) ||
       value.contains(QLatin1Char('^')))
     return value;
@@ -131,7 +155,7 @@ QString MarketService::normalizeSymbol(const QString &raw) {
 }
 
 QString MarketService::marketKey(const QString &symbol) {
-  const QString upper = symbol.toUpper();
+  const QString upper = normalizeSymbol(symbol);
   if (upper.endsWith(QStringLiteral(".SS")) ||
       upper.endsWith(QStringLiteral(".SZ")) ||
       upper.endsWith(QStringLiteral(".BJ")))
@@ -163,18 +187,33 @@ QDateTime MarketService::marketNow(const QString &market) const {
       .toTimeZone(marketTimeZone(market));
 }
 
+QDate MarketService::marketDate(const QString &symbol) const {
+  return marketNow(marketKey(symbol)).date();
+}
+
+bool MarketService::isTradingDay(const QString &symbol, const QDate &date) const {
+  if (!date.isValid())
+    return false;
+  if (marketKey(symbol) == QStringLiteral("CN") &&
+      m_cnTradingCalendarLoaded && date >= m_cnCalendarFirst &&
+      date <= m_cnCalendarLast)
+    return m_cnTradingDates.contains(date);
+  return date.dayOfWeek() < Qt::Saturday;
+}
+
 bool MarketService::isMarketOpen(const QString &symbol) const {
   const QString market = marketKey(symbol);
   const auto now = marketNow(market);
-  if (now.date().dayOfWeek() >= Qt::Saturday)
+  if (!isTradingDay(symbol, now.date()))
     return false;
-  const auto state = m_tradingStates.value(market);
+  const auto state = m_tradingStates.value(symbol);
   if (state.localDate == now.date() &&
       state.expiresAt > QDateTime::currentSecsSinceEpoch() && !state.tradingDay)
     return false;
   const int minute = now.time().hour() * 60 + now.time().minute();
   if (market == QStringLiteral("CN"))
-    return (minute >= 570 && minute < 690) || (minute >= 780 && minute < 900);
+    // A 股 09:15-09:30 为集合竞价，也需要自动刷新行情。
+    return (minute >= 555 && minute < 690) || (minute >= 780 && minute < 900);
   if (market == QStringLiteral("HK"))
     return (minute >= 570 && minute < 720) || (minute >= 780 && minute < 960);
   return minute >= 570 && minute < 960;
@@ -187,8 +226,8 @@ QString MarketService::marketStatus(const QString &symbol) const {
                             ? QStringLiteral("港股")
                             : QStringLiteral("美股");
   const auto now = marketNow(market);
-  const auto state = m_tradingStates.value(market);
-  if (now.date().dayOfWeek() >= Qt::Saturday ||
+  const auto state = m_tradingStates.value(symbol);
+  if (!isTradingDay(symbol, now.date()) ||
       (state.localDate == now.date() &&
        state.expiresAt > QDateTime::currentSecsSinceEpoch() &&
        !state.tradingDay))
@@ -200,7 +239,8 @@ QString MarketService::marketStatus(const QString &symbol) const {
       (market == QStringLiteral("HK") && minute >= 720 && minute < 780))
     return label + QStringLiteral("午休");
   return label +
-         (minute < 570 ? QStringLiteral("未开盘") : QStringLiteral("已收盘"));
+         (minute < (market == QStringLiteral("CN") ? 555 : 570)
+              ? QStringLiteral("未开盘") : QStringLiteral("已收盘"));
 }
 
 void MarketService::requestQuotes(const QVector<QuoteRequest> &requests,
@@ -227,12 +267,86 @@ void MarketService::requestQuotes(const QVector<QuoteRequest> &requests,
   dispatchNext(batch);
 }
 
+void MarketService::requestIntraday(const QVector<QuoteRequest> &requests,
+                                    int batchId) {
+  if (requests.isEmpty()) {
+    emit intradayReady(batchId, {});
+    return;
+  }
+  auto results = std::make_shared<QVector<IntradayResult>>();
+  auto pending = std::make_shared<int>(int(requests.size()));
+  results->resize(requests.size());
+  for (qsizetype i = 0; i < requests.size(); ++i) {
+    const auto &request = requests.at(i);
+    const bool cn = marketKey(request.symbol) == QStringLiteral("CN");
+    QUrl url;
+    if (cn) {
+      url = QUrl(QStringLiteral("https://web.ifzq.gtimg.cn/appstock/"
+                                "app/minute/query?code=%1")
+                     .arg(chinaQuerySymbol(request.symbol)));
+    } else {
+      url = QUrl(QStringLiteral("https://query1.finance.yahoo.com/v8/"
+                                "finance/chart/%1?interval=1m&range=1d")
+                     .arg(QString::fromLatin1(
+                         QUrl::toPercentEncoding(yahooSymbol(request.symbol)))));
+    }
+    QNetworkRequest requestObject{url};
+    requestObject.setRawHeader(QByteArrayLiteral("User-Agent"),
+                               QByteArrayLiteral("Mozilla/5.0 MianADesk/2.0"));
+    requestObject.setTransferTimeout(8000);
+    auto *reply = m_network.get(requestObject);
+    m_replies.push_back(reply);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, results, pending, batchId, i, request, reply, cn] {
+              m_replies.removeAll(reply);
+              IntradayResult result;
+              result.positionId = request.positionId;
+              result.symbol = request.symbol;
+              if (reply->error() == QNetworkReply::NoError) {
+                const QByteArray body = reply->readAll();
+                try {
+                  const auto parsed =
+                      cn ? parseTencentIntraday(
+                               chinaQuerySymbol(request.symbol), body)
+                         : parseYahooIntraday(body, marketKey(request.symbol));
+                  result.prices = parsed.prices;
+                  result.minutes = parsed.minutes;
+                  result.tradingDate = parsed.tradingDate;
+                  if (result.prices.size() >= 2)
+                    result.success = true;
+                  else
+                    result.error = QStringLiteral("分时数据不足");
+                } catch (const std::exception &exception) {
+                  result.error = QString::fromUtf8(exception.what());
+                }
+              } else {
+                result.error = reply->errorString();
+              }
+              reply->deleteLater();
+              (*results)[i] = std::move(result);
+              if (--(*pending) == 0)
+                emit intradayReady(batchId, *results);
+            });
+  }
+}
+
 void MarketService::abortAll() {
-  for (const auto &reply : std::as_const(m_replies))
-    if (reply)
-      reply->abort();
-  m_replies.clear();
+  // Invalidate batches before abort() can synchronously emit finished().
   m_batches.clear();
+  const auto replies = std::exchange(m_replies, {});
+  for (const auto &reply : replies) {
+    if (reply) {
+      disconnect(reply, nullptr, this, nullptr);
+      reply->abort();
+      reply->deleteLater();
+    }
+  }
+  if (m_calendarReply) {
+    disconnect(m_calendarReply, nullptr, this, nullptr);
+    m_calendarReply->abort();
+    m_calendarReply->deleteLater();
+  }
+  m_calendarReply = nullptr;
 }
 
 QVector<MarketService::Provider>
@@ -251,7 +365,10 @@ QString MarketService::queryKey(Provider provider, const QString &symbol) {
     if (market == QStringLiteral("HK"))
       return QStringLiteral("r_hk") + symbol.section(QLatin1Char('.'), 0, 0)
                                          .rightJustified(5, QLatin1Char('0'));
-    return QStringLiteral("us") + symbol;
+    QString ticker = normalizeSymbol(symbol);
+    if (ticker.endsWith(QStringLiteral(".US")))
+      ticker.chop(3);
+    return QStringLiteral("us") + ticker;
   }
   return chinaQuerySymbol(symbol);
 }
@@ -271,12 +388,12 @@ QNetworkRequest MarketService::makeRequest(Provider provider,
                                ? QStringLiteral("1")
                                : QStringLiteral("0");
     url = QStringLiteral("https://push2.eastmoney.com/api/qt/stock/"
-                         "get?secid=%1.%2&fields=f43,f57,f58,f59,f124")
+                         "get?secid=%1.%2&fields=f43,f57,f58,f59,f60,f124")
               .arg(prefix, code);
   } else {
     url = QStringLiteral("https://query1.finance.yahoo.com/v8/finance/chart/"
                          "%1?interval=1m&range=1d")
-              .arg(QString::fromLatin1(QUrl::toPercentEncoding(symbol)));
+              .arg(QString::fromLatin1(QUrl::toPercentEncoding(yahooSymbol(symbol))));
   }
   QNetworkRequest request{QUrl(url)};
   request.setRawHeader(QByteArrayLiteral("User-Agent"),
@@ -317,11 +434,12 @@ QNetworkRequest MarketService::makeGroupedRequest(
 }
 
 void MarketService::dispatchNext(const std::shared_ptr<Batch> &batch) {
-  if (batch->resolved == batch->expected)
+  if (m_batches.value(batch->batchId) != batch ||
+      batch->resolved == batch->expected)
     return;
   QHash<int, QVector<std::shared_ptr<Pending>>> groups;
   for (const auto &pending : batch->pendings) {
-    if (pending->inFlight)
+    if (pending->inFlight || pending->completed)
       continue;
     if (pending->providerIndex < pending->providers.size())
       groups[int(pending->providers.at(pending->providerIndex))]
@@ -376,6 +494,8 @@ void MarketService::handleGroupedReply(
           : QString{};
   bool advanced = false;
   for (const auto &pending : pendings) {
+    if (pending->completed)
+      continue;
     pending->inFlight = false;
     if (ok) {
       try {
@@ -419,11 +539,13 @@ void MarketService::handleGroupedReply(
 void MarketService::resolvePending(const std::shared_ptr<Batch> &batch,
                                    const std::shared_ptr<Pending> &pending,
                                    QuoteResult result) {
-  if (m_batches.value(batch->batchId) != batch)
+  if (m_batches.value(batch->batchId) != batch || pending->completed)
     return;
   const int index = batch->resultIndex.value(pending->positionId, -1);
   if (index < 0)
     return;
+  pending->completed = true;
+  pending->inFlight = false;
   batch->results[index] = std::move(result);
   ++batch->resolved;
   if (batch->resolved >= batch->expected) {
@@ -459,6 +581,14 @@ QuoteResult MarketService::parseReply(Provider provider,
                    std::pow(10.0, precision);
     if (!validPrice(result.price))
       throw std::runtime_error("invalid quote price");
+    const double prevClose = data.value(QStringLiteral("f60")).toDouble() /
+                             std::pow(10.0, precision);
+    if (validPrice(prevClose)) {
+      result.previousClose = prevClose;
+      result.changePercent =
+          (result.price - prevClose) / prevClose * 100.0;
+      result.hasChange = true;
+    }
     result.name = data.value(QStringLiteral("f58")).toString();
     result.marketTimestamp =
         data.value(QStringLiteral("f124")).toVariant().toLongLong();
@@ -502,6 +632,14 @@ QuoteResult MarketService::parseReply(Provider provider,
     result.marketTimestamp = meta.value(QStringLiteral("regularMarketTime"))
                                  .toVariant()
                                  .toLongLong();
+    const double chartPrevClose =
+        meta.value(QStringLiteral("chartPreviousClose")).toDouble();
+    if (validPrice(chartPrevClose)) {
+      result.previousClose = chartPrevClose;
+      result.changePercent =
+          (result.price - chartPrevClose) / chartPrevClose * 100.0;
+      result.hasChange = true;
+    }
   }
   result.success = true;
   return result;
@@ -540,11 +678,155 @@ QuoteResult MarketService::parseReplyText(
   result.price = parts.at(3).toDouble(&ok);
   if (!ok || !validPrice(result.price))
     throw std::runtime_error("invalid quote price");
+  const int prevCloseIndex = provider == Provider::Tencent ? 4 : 2;
+  bool prevOk = false;
+  const double prevClose = parts.value(prevCloseIndex).toDouble(&prevOk);
+  if (prevOk && validPrice(prevClose)) {
+      result.previousClose = prevClose;
+    result.changePercent = (result.price - prevClose) / prevClose * 100.0;
+    result.hasChange = true;
+  }
   result.name =
       provider == Provider::Tencent ? parts.value(1) : parts.value(0);
   result.marketTimestamp = providerTimestamp(parts, market);
   result.success = true;
   return result;
+}
+
+int MarketService::cnIntradaySlot(int minuteOfDay) {
+  // Keep the existing 240 buckets; session endpoints close the final bucket.
+  if (minuteOfDay >= 570 && minuteOfDay <= 690)
+    return std::min(119, minuteOfDay - 570);
+  if (minuteOfDay >= 780 && minuteOfDay <= 900)
+    return std::min(239, 120 + minuteOfDay - 780);
+  return -1;
+}
+
+IntradayResult MarketService::parseTencentIntraday(const QString &key,
+                                                    const QByteArray &body) {
+  const auto payload = QJsonDocument::fromJson(body)
+                           .object()
+                           .value(QStringLiteral("data"))
+                           .toObject()
+                           .value(key)
+                           .toObject()
+                           .value(QStringLiteral("data"))
+                           .toObject();
+  IntradayResult result;
+  result.tradingDate = QDate::fromString(
+      payload.value(QStringLiteral("date")).toString(), QStringLiteral("yyyyMMdd"));
+  if (!result.tradingDate.isValid())
+    throw std::runtime_error("missing intraday trading date");
+  const auto data = payload.value(QStringLiteral("data")).toArray();
+  result.prices =
+      QVector<double>(240, std::numeric_limits<double>::quiet_NaN());
+  for (const auto &row : data) {
+    const QStringList fields = row.toString().split(QLatin1Char(' '));
+    QString timeField = fields.value(0);
+    timeField.remove(QLatin1Char(':'));
+    bool timeOk = false;
+    const int hhmm = timeField.left(4).toInt(&timeOk);
+    const int minuteOfDay =
+        timeOk ? (hhmm / 100) * 60 + (hhmm % 100) : -1;
+    bool priceOk = false;
+    const double price = fields.value(1).toDouble(&priceOk);
+    const int slot = cnIntradaySlot(minuteOfDay);
+    if (priceOk && validPrice(price) && slot >= 0 &&
+        slot < result.prices.size())
+      result.prices[slot] = price;
+  }
+  bool hasPrice = false;
+  for (const double value : result.prices)
+    hasPrice = hasPrice || validPrice(value);
+  if (!hasPrice)
+    throw std::runtime_error("empty intraday payload");
+  return result;
+}
+
+IntradayResult MarketService::parseYahooIntraday(const QByteArray &body,
+                                                  const QString &market) {
+  const auto root = QJsonDocument::fromJson(body)
+                        .object()
+                        .value(QStringLiteral("chart"))
+                        .toObject()
+                        .value(QStringLiteral("result"))
+                        .toArray();
+  if (root.isEmpty())
+    throw std::runtime_error("empty Yahoo result");
+  const auto quote = root.at(0)
+                         .toObject()
+                         .value(QStringLiteral("indicators"))
+                         .toObject()
+                         .value(QStringLiteral("quote"))
+                         .toArray();
+  const auto closes =
+      quote.isEmpty() ? QJsonArray{} : quote.at(0).toObject()
+                                          .value(QStringLiteral("close"))
+                                          .toArray();
+  const auto timestamps = root.at(0)
+                              .toObject()
+                              .value(QStringLiteral("timestamp"))
+                              .toArray();
+  IntradayResult result;
+  result.prices.reserve(closes.size());
+  for (qsizetype i = 0; i < closes.size(); ++i) {
+    const auto &value = closes.at(i);
+    if (!value.isDouble() || !validPrice(value.toDouble()) ||
+        i >= timestamps.size())
+      continue;
+    const qint64 seconds = timestamps.at(i).toVariant().toLongLong();
+    if (seconds <= 0)
+      continue;
+    const QDate date = QDateTime::fromSecsSinceEpoch(seconds, QTimeZone::utc())
+                           .toTimeZone(marketTimeZone(market)).date();
+    if (date < result.tradingDate)
+      continue;
+    if (date != result.tradingDate) {
+      result.prices.clear();
+      result.minutes.clear();
+      result.tradingDate = date;
+    }
+    result.prices.push_back(value.toDouble());
+    result.minutes.push_back(seconds / 60);
+  }
+  if (result.prices.isEmpty() || !result.tradingDate.isValid())
+    throw std::runtime_error("empty intraday payload");
+  return result;
+}
+
+void MarketService::requestCnTradingCalendar() {
+  QNetworkRequest request{QUrl(QStringLiteral(
+      "https://assets.linkdiary.cn/shares/trade-data-list.txt"))};
+  request.setRawHeader(QByteArrayLiteral("User-Agent"),
+                       QByteArrayLiteral("Mozilla/5.0 MianADesk/2.0"));
+  request.setTransferTimeout(8000);
+  m_calendarReply = m_network.get(request);
+  connect(m_calendarReply, &QNetworkReply::finished, this, [this] {
+    const auto reply = m_calendarReply;
+    m_calendarReply = nullptr;
+    if (!reply)
+      return;
+    const bool ok = reply->error() == QNetworkReply::NoError;
+    const QByteArray body = ok ? reply->readAll() : QByteArray{};
+    reply->deleteLater();
+    if (!ok)
+      return;
+    QSet<QDate> dates;
+    const auto values = QString::fromUtf8(body).split(QLatin1Char(','));
+    for (const auto &value : values) {
+      const QDate date = QDate::fromString(value.trimmed(), Qt::ISODate);
+      if (date.isValid())
+        dates.insert(date);
+    }
+    if (dates.isEmpty())
+      return;
+    m_cnTradingDates = std::move(dates);
+    const auto range = std::minmax_element(m_cnTradingDates.cbegin(),
+                                          m_cnTradingDates.cend());
+    m_cnCalendarFirst = *range.first;
+    m_cnCalendarLast = *range.second;
+    m_cnTradingCalendarLoaded = true;
+  });
 }
 
 void MarketService::rememberTradingState(const QuoteResult &result) {
@@ -561,5 +843,5 @@ void MarketService::rememberTradingState(const QuoteResult &result) {
   state.tradingDay = quoteDate == now.date();
   state.expiresAt =
       QDateTime::currentSecsSinceEpoch() + (state.tradingDay ? 86400 : 90);
-  m_tradingStates.insert(market, state);
+  m_tradingStates.insert(result.symbol, state);
 }

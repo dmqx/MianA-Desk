@@ -1,3 +1,4 @@
+# MianA Desk v1.1 single-file package
 cmake_minimum_required(VERSION 3.21)
 
 include(../cmake/MianAVersion.cmake)

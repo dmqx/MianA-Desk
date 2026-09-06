@@ -38,6 +38,9 @@ bool tagIsNewer(const QString &tag, const QString &current) {
 UpdateChecker::UpdateChecker(QObject *parent) : QObject(parent) {}
 
 void UpdateChecker::check() {
+  if (m_checking)
+    return;
+  m_checking = true;
   QNetworkRequest request(LatestReleaseUrl);
   request.setRawHeader(QByteArrayLiteral("User-Agent"),
                        QByteArrayLiteral("MianADesk/" MIANA_VERSION_STRING));
@@ -46,6 +49,7 @@ void UpdateChecker::check() {
   request.setTransferTimeout(8000);
   QNetworkReply *reply = m_network.get(request);
   connect(reply, &QNetworkReply::finished, this, [this, reply] {
+    m_checking = false;
     reply->deleteLater();
     if (reply->error() != QNetworkReply::NoError) {
       emit checkFailed();

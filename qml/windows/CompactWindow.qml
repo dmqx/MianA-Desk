@@ -34,25 +34,25 @@ ColumnLayout {
         id: list
         Layout.fillWidth: true
         Layout.fillHeight: true
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
+        Layout.bottomMargin: 4
         clip: true
+        spacing: 6
         model: view.controller.positions
-        ScrollBar.vertical: ScrollBar { width: 7; policy: list.contentHeight > list.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
-        delegate: Rectangle {
-            id: row
-            required property string positionId
-            required property string symbol
-            required property string priceText
-            required property bool hasError
-            width: list.width - (list.contentHeight > list.height ? 7 : 0)
-            height: 34
-            color: mouse.containsMouse ? view.controller.paletteHover : view.controller.palettePanel
-            RowLayout {
-                anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
-                Label { text: row.symbol; color: row.hasError ? "#E88B00" : view.controller.paletteMuted; font.pixelSize: 10; Layout.fillWidth: true }
-                Label { text: row.priceText; color: row.hasError ? "#E88B00" : view.controller.paletteMuted; font.pixelSize: 10 }
-            }
-            MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; onClicked: view.controller.setFocus(row.positionId) }
+        ScrollBar.vertical: ScrollBar { width: 7; policy: ScrollBar.AsNeeded }
+        delegate: Components.CompactCard {
+            id: card
+            controller: view.controller
+            x: Math.max(0, (list.width - width) / 2)
+            width: list.width - 8 - (list.contentHeight > list.height ? 8 : 0)
         }
-        Label { anchors.centerIn: parent; visible: view.controller.count === 0; text: "暂无自选"; color: view.controller.paletteMuted; font.pixelSize: 10 }
+        Label {
+            anchors.centerIn: parent
+            visible: view.controller.count === 0
+            text: "暂无自选"
+            color: view.controller.paletteMuted
+            font.pixelSize: 10
+        }
     }
 }

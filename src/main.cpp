@@ -5,6 +5,7 @@
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QVariant>
 #include <QWindow>
 
@@ -22,6 +23,7 @@
 int main(int argc, char *argv[]) {
   QQuickStyle::setStyle(QStringLiteral("Windows"));
   QApplication app(argc, argv);
+
   QCoreApplication::setApplicationName(QStringLiteral("MianA Desk"));
   QCoreApplication::setOrganizationName(QStringLiteral("MianA"));
   QCoreApplication::setApplicationVersion(QStringLiteral(MIANA_VERSION_STRING));
@@ -44,8 +46,13 @@ int main(int argc, char *argv[]) {
   if (engine.rootObjects().isEmpty())
     return 1;
 
-  if (auto *window = qobject_cast<QWindow *>(engine.rootObjects().constFirst()))
+  if (auto *window = qobject_cast<QWindow *>(engine.rootObjects().constFirst())) {
+    // Keep the native Quick surface alpha-capable so panel colors can reveal
+    // the desktop without also lowering text opacity.
+    if (auto *quickWindow = qobject_cast<QQuickWindow *>(window))
+      quickWindow->setColor(Qt::transparent);
     windows.watchWindow(window);
+  }
   // The legacy application creates its tray menu only after QML has loaded.
   // Preserve that order so the QApplication style, palette and fonts have
   // completed the same initialization before QMenu snapshots them.

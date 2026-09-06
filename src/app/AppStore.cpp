@@ -22,6 +22,8 @@ constexpr int DataSchemaVersion = 1;
 AppStore::AppStore() : m_path(dataPath()) {}
 
 bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
+  m_loadError.clear();
+  m_safeToOverwrite = true;
   QFile file(m_path);
   if (!file.exists())
     return true;
@@ -35,15 +37,13 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   const auto root = document.object();
   if (parseError.error != QJsonParseError::NoError || !document.isObject() ||
       root.value(QStringLiteral("schema_version")).toInt(-1) !=
-          DataSchemaVersion) {
-    m_loadError = parseError.error == QJsonParseError::NoError
-                      ? QStringLiteral("不支持的数据格式")
-                      : parseError.errorString();
-    const QString backup =
-        m_path + QStringLiteral(".invalid-%1.bak")
-                     .arg(QDateTime::currentSecsSinceEpoch());
-    m_safeToOverwrite = QFile::copy(m_path, backup);
-    return false;
+          DataSchemaVersion ||
+      !root.value(QStringLiteral("positions")).isArray() ||
+      (!root.value(QStringLiteral("settings")).isUndefined() &&
+       !root.value(QStringLiteral("settings")).isObject())) {
+    return backupInvalidData(parseError.error == QJsonParseError::NoError
+                                 ? QStringLiteral("不支持的数据格式")
+                                 : parseError.errorString());
   }
   const auto raw = root.value(QStringLiteral("settings")).toObject();
   auto boolean = [&](const char *key, bool fallback) {
@@ -62,11 +62,15 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   settings.locked = boolean("locked", false);
   settings.compact = boolean("compact", false);
   settings.floating = boolean("floating", false);
+  settings.showIntraday = boolean("show_intraday", true);
+  settings.hideStockCode = boolean("hide_stock_code", false);
   settings.focusId = raw.value(QStringLiteral("focus_id")).toString();
   settings.paused = boolean("paused", false);
   settings.minimizeToTray = boolean("minimize_to_tray", true);
   settings.autoTheme = boolean("auto_theme", false);
-  settings.themeOpacity = std::clamp(integer("theme_opacity", 95), 40, 95);
+  const int legacyOpacity = std::clamp(integer("theme_opacity", 95), 40, 95);
+  settings.frameOpacity = std::clamp(integer("frame_opacity", legacyOpacity), 10, 100);
+  settings.textOpacity = std::clamp(integer("text_opacity", legacyOpacity), 10, 100);
   const QString color =
       raw.value(QStringLiteral("theme_color")).toString().toUpper();
   static const QRegularExpression hexColor(QStringLiteral("^#[0-9A-F]{6}$"));
@@ -77,13 +81,18 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   QSet<QString> ids;
   const auto values = root.value(QStringLiteral("positions")).toArray();
   loaded.reserve(values.size());
+  bool discarded = false;
   for (const auto &value : values) {
-    if (!value.isObject())
+    if (!value.isObject()) {
+      discarded = true;
       continue;
+    }
     bool valid = false;
     auto item = parsePosition(value.toObject(), valid);
-    if (!valid)
+    if (!valid) {
+      discarded = true;
       continue;
+    }
     if (ids.contains(item.id))
       item.id = QUuid::createUuid().toString(QUuid::Id128);
     ids.insert(item.id);
@@ -92,7 +101,7 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   if (!ids.contains(settings.focusId))
     settings.focusId = loaded.isEmpty() ? QString{} : loaded.constFirst().id;
   positions = std::move(loaded);
-  return true;
+  return discarded ? backupInvalidData(QStringLiteral("部分自选数据无效")) : true;
 }
 
 bool AppStore::save(const QVector<Position> &positions,
@@ -106,12 +115,15 @@ bool AppStore::save(const QVector<Position> &positions,
       {QStringLiteral("locked"), settings.locked},
       {QStringLiteral("compact"), settings.compact},
       {QStringLiteral("floating"), settings.floating},
+      {QStringLiteral("show_intraday"), settings.showIntraday},
+      {QStringLiteral("hide_stock_code"), settings.hideStockCode},
       {QStringLiteral("focus_id"), settings.focusId},
       {QStringLiteral("paused"), settings.paused},
       {QStringLiteral("minimize_to_tray"), settings.minimizeToTray},
       {QStringLiteral("auto_theme"), settings.autoTheme},
       {QStringLiteral("theme_color"), settings.themeColor},
-      {QStringLiteral("theme_opacity"), settings.themeOpacity}};
+      {QStringLiteral("frame_opacity"), settings.frameOpacity},
+      {QStringLiteral("text_opacity"), settings.textOpacity}};
   QJsonArray rawPositions;
   for (const auto &item : positions)
     rawPositions.append(
@@ -133,12 +145,25 @@ bool AppStore::save(const QVector<Position> &positions,
                   {QStringLiteral("positions"), rawPositions}});
   QDir().mkpath(QFileInfo(m_path).absolutePath());
   QSaveFile file(m_path);
+  const QByteArray bytes = document.toJson(QJsonDocument::Indented);
   if (!file.open(QIODevice::WriteOnly) ||
-      file.write(document.toJson(QJsonDocument::Indented)) < 0) {
+      file.write(bytes) != bytes.size()) {
     file.cancelWriting();
     return false;
   }
   return file.commit();
+}
+
+bool AppStore::backupInvalidData(const QString &reason) {
+  const QString backup =
+      m_path + QStringLiteral(".invalid-%1-%2.bak")
+                   .arg(QDateTime::currentMSecsSinceEpoch())
+                   .arg(QUuid::createUuid().toString(QUuid::Id128));
+  m_safeToOverwrite = QFile::copy(m_path, backup);
+  m_loadError = (m_safeToOverwrite
+                    ? QStringLiteral("数据文件异常，原文件已备份：")
+                    : QStringLiteral("数据文件异常，备份失败，已禁止覆盖：")) + reason;
+  return false;
 }
 
 QString AppStore::loadError() const { return m_loadError; }

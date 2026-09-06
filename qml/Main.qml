@@ -11,15 +11,17 @@ import "windows" as Windows
 ApplicationWindow {
     id: root
     required property var appController
+    property bool floatingMode: appController.floating
     visible: true
     title: "MianA Desk · 股票桌面小组件"
     color: "transparent"
-    readonly property int pageWidth: appController.floating ? 150 : 288
+    readonly property int pageWidth: appController.floating ? 74 : 288
     readonly property int pageHeight: appController.floating ? 34
-        : appController.compact ? Math.min(340, 48 + Math.max(1, appController.count) * 34) : 340
+        : appController.compact ? Math.min(340, 44 + Math.max(1, appController.count) * 46) : 340
     flags: Qt.FramelessWindowHint
         | (appController.topmost ? Qt.Window
            : (appController.floating ? Qt.Tool : Qt.Window))
+        | (appController.floating ? Qt.NoDropShadowWindowHint : 0)
         | (appController.topmost ? Qt.WindowStaysOnTopHint : 0)
     x: appController.savedX
     y: appController.savedY
@@ -29,7 +31,6 @@ ApplicationWindow {
     maximumWidth: pageWidth
     minimumHeight: pageHeight
     maximumHeight: pageHeight
-    opacity: appController.themeOpacity / 100
 
     function ensureVisible() {
         const left = Screen.virtualX
@@ -77,6 +78,7 @@ ApplicationWindow {
 
     background: Rectangle {
         color: root.appController.floating ? root.appController.palettePanel : root.appController.paletteBg
+        radius: root.appController.floating ? root.height / 2 : 0
     }
 
     Loader {
