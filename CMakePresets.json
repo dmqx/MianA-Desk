@@ -2,16 +2,19 @@
   "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 21,
+    "minor": 22,
     "patch": 0
   },
   "configurePresets": [
     {
       "name": "windows-msvc-release",
       "displayName": "Windows x64 Release",
-      "description": "MianA Desk v1.1",
+      "description": "MianA Desk · C++23 · Qt 6.11.2",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/.build",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.11.2/msvc2022_64"
+      },
       "architecture": "x64"
     }
   ],

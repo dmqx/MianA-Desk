@@ -1,5 +1,5 @@
-#include "app/AppController.h"
-#include "app/WindowManager.h"
+#include "MianA.UI/AppController.h"
+#include "MianA.Windows/WindowManager.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -38,6 +38,24 @@ int main(int argc, char *argv[]) {
   AppController controller(windows);
   QObject::connect(&controller, &AppController::shutdownRequested, &app,
                    &QCoreApplication::quit);
+  QObject::connect(&windows, &WindowManager::toggleFloatingRequested,
+                   &controller, &AppController::toggleFloatingAndShow);
+  QObject::connect(&windows, &WindowManager::showFullRequested, &controller,
+                   &AppController::showFull);
+  QObject::connect(&windows, &WindowManager::togglePausedRequested,
+                   &controller, [&controller] {
+                     controller.toggle(QStringLiteral("paused"));
+                   });
+  QObject::connect(&windows, &WindowManager::autostartRequested, &controller,
+                   &AppController::setAutostart);
+  QObject::connect(&windows, &WindowManager::settingsRequested, &controller,
+                   &AppController::settingsRequested);
+  QObject::connect(&windows, &WindowManager::checkUpdatesRequested,
+                   &controller, [&controller] {
+                     controller.checkForUpdates(true);
+                   });
+  QObject::connect(&windows, &WindowManager::quitRequested, &controller,
+                   &AppController::saveAndShutdown);
 
   QQmlApplicationEngine engine;
   engine.setInitialProperties(
@@ -56,7 +74,9 @@ int main(int argc, char *argv[]) {
   // The legacy application creates its tray menu only after QML has loaded.
   // Preserve that order so the QApplication style, palette and fonts have
   // completed the same initialization before QMenu snapshots them.
-  windows.initializeTray(&controller);
+  windows.initializeTray();
+  windows.setTrayState(controller.floating(), controller.paused(),
+                       controller.autostart());
   QObject::connect(&app, &QGuiApplication::focusWindowChanged, &windows,
                    [&windows](QWindow *window) {
                      if (window)

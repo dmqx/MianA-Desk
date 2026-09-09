@@ -1,5 +1,5 @@
-# MianA Desk v1.1 single-file package
-cmake_minimum_required(VERSION 3.21)
+# MianA Desk v1.2 single-file package
+cmake_minimum_required(VERSION 3.22)
 
 include(../cmake/MianAVersion.cmake)
 project(MianADeskPackage VERSION ${MIANA_VERSION} LANGUAGES CXX RC)
@@ -8,7 +8,7 @@ if(NOT WIN32 OR NOT MSVC)
     message(FATAL_ERROR "The single-file package currently supports MSVC on Windows only.")
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -31,6 +31,7 @@ FetchContent_Declare(
     zstd
     URL https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz
     URL_HASH SHA256=eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SOURCE_SUBDIR build/cmake
 )
 FetchContent_MakeAvailable(zstd)
