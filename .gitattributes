@@ -1,7 +1,9 @@
-# MianA Desk v1.1 repository attributes
+# MianA Desk v1.2 repository attributes
 * text=auto eol=lf
 *.ico binary
 *.png binary
 *.exe binary
 *.bat text eol=crlf
 *.cmd text eol=crlf
+*.h linguist-language=C++
+*.h.in linguist-language=C++

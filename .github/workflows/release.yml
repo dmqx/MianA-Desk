@@ -1,4 +1,4 @@
-# MianA Desk v1.1 release workflow
+# MianA Desk v1.2 release workflow
 name: Build Windows package
 
 on:
@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   windows:
+    if: ${{ !github.event.forced }}
     runs-on: windows-2022
     timeout-minutes: 30
 
@@ -20,12 +21,26 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: "6.8.3"
-          arch: win64_msvc2022_64
-          cache: true
+      - name: Install Qt 6.11.2
+        shell: pwsh
+        run: |
+          $base = "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64"
+          $prefix = "6.11.2-0-202608131017"
+          $archives = @(
+            "qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+            "qtdeclarative-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+            "qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+            "qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"
+          )
+          $qtRoot = "C:\Qt\6.11.2\msvc2022_64"
+          New-Item -ItemType Directory -Force $qtRoot | Out-Null
+          foreach ($archive in $archives) {
+            $file = Join-Path $env:RUNNER_TEMP $archive
+            Invoke-WebRequest "$base/$prefix$archive" -OutFile $file
+            7z x $file "-o$qtRoot" -y
+          }
+          Set-Content -Path "C:\Qt\6.11.2\msvc2022_64\bin\qt.conf" -Value "[Paths]`nPrefix=.."
+          "C:\Qt\6.11.2\msvc2022_64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Configure application
         run: cmake --preset windows-msvc-release
@@ -61,10 +76,15 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${{ github.ref_name }}"
-          "dist/MianA-Desk-${{ github.ref_name }}.exe"
-          --title "MianA Desk ${{ github.ref_name }}"
-          --generate-notes 2>$null
-          || gh release upload "${{ github.ref_name }}"
-          "dist/MianA-Desk-${{ github.ref_name }}.exe" --clobber
+        run: |
+          $notes = @"
+          1. 桌面端整体升级并重构为 C++23
+          2. UI 与运行框架升级至 Qt 6.11.2
+          3. 修复浮窗关闭后从托盘恢复时窗口模式丢失的问题
+          "@
+          if (gh release view "${{ github.ref_name }}" 2>$null) {
+            gh release edit "${{ github.ref_name }}" --title "MianA Desk ${{ github.ref_name }}" --notes $notes
+            gh release upload "${{ github.ref_name }}" "dist/MianA-Desk-${{ github.ref_name }}.exe" --clobber
+          } else {
+            gh release create "${{ github.ref_name }}" "dist/MianA-Desk-${{ github.ref_name }}.exe" --title "MianA Desk ${{ github.ref_name }}" --notes $notes
+          }

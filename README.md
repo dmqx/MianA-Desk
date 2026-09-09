@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  「MianA Desk」是一款基于 C++20、Qt 6 与 QML 的轻量级 Windows 桌面行情组件。
+  「MianA Desk」是一款基于 C++23、Qt 6 与 QML 的轻量级 Windows 桌面行情组件。
 </p>
 
 > 本项目仅用于行情展示，不构成任何投资建议。行情可能存在延迟，请以交易所和券商数据为准。
@@ -21,6 +21,25 @@
 * 支持透明主题、桌面取色等个性化外观设置
 * 支持 Windows 原生圆角与阴影效果
 
+## 代码结构
+
+```text
+src/
+├─ main.cpp
+├─ MianA.Core/            数据结构、市场规则与分时序列算法
+├─ MianA.Market/          行情请求调度与行情源解析
+├─ MianA.Infrastructure/  数据持久化与版本更新
+├─ MianA.Windows/         Windows 窗口、托盘、热键与自启动
+└─ MianA.UI/
+   ├─ AppController.*
+   ├─ PositionModel.*
+   └─ qml/
+      ├─ Main.qml
+      ├─ Views/
+      └─ Controls/
+```
+
+各模块由独立 CMake target 约束依赖方向；QML 使用强类型 C++ 接口，并由构建系统执行 `qmlcachegen` 与 `qmllint`。
 ## 系统要求
 
 * Windows 11 x64
@@ -40,20 +59,20 @@
 
 * Visual Studio 2022 Build Tools
 * MSVC x64
-* Qt 6.8+ MSVC 2022 x64
-* CMake 3.21+
+* Qt 6.11.2 MSVC 2022 x64
+* CMake 3.22+
 
 #### 构建与打包
 
 ```powershell
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release
-cmake --install .build --config Release --prefix dist
+cmake --install .build --config Release --prefix dist/qt
 
 cmake -S packaging -B .package-build `
   -G "Visual Studio 17 2022" `
   -A x64 `
-  -DMIANA_DIST_DIR="$PWD/dist"
+  -DMIANA_DIST_DIR="$PWD/dist/qt"
 
 cmake --build .package-build `
   --config Release `
@@ -70,7 +89,7 @@ cmake --build .package-build `
 
 ```powershell
 cmake --preset windows-msvc-release `
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.8.3/msvc2022_64"
+  -DCMAKE_PREFIX_PATH="C:/Qt/6.11.2/msvc2022_64"
 ```
 
 安装阶段会自动运行 `windeployqt`，并移除未使用的插件、主题、翻译、软件 OpenGL 及开发文件。打包器使用 Zstandard 压缩完整部署目录并嵌入可执行文件。

@@ -1,1 +1,1 @@
-set(MIANA_VERSION 1.1)
+set(MIANA_VERSION 1.2)
