@@ -32,7 +32,7 @@ ColumnLayout {
             Label { text: "●"; color: view.controller.statusColor; font.family: "Arial"; font.pixelSize: 8 }
             Label { text: view.controller.statusText; color: view.controller.paletteMuted; font.family: "Microsoft YaHei UI"; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
             Components.AppButton { controller: view.controller; text: view.controller.locked ? "锁" : "移"; onClicked: view.controller.toggle("locked") }
-            Components.AppButton { controller: view.controller; text: view.controller.topmost ? "顶" : "层"; onClicked: view.controller.toggle("topmost") }
+            Components.AppButton { controller: view.controller; text: view.controller.topmost ? "顶" : "底"; onClicked: view.controller.toggle("topmost") }
             Components.AppButton { controller: view.controller; text: "折"; onClicked: view.controller.toggle("compact") }
             Components.AppButton { controller: view.controller; text: "浮"; onClicked: view.controller.toggle("floating") }
             Components.AppButton { controller: view.controller; text: "×"; font.pixelSize: 14; onClicked: view.mainWindow.close() }
@@ -207,6 +207,7 @@ ColumnLayout {
     property Window positionMenuWindow: Window {
         id: positionMenu
         objectName: "positionMenu"
+        property bool hideBorderShadow: view.controller.hideBorderShadow
         property string positionId: ""
         property string positionSymbol: ""
         property string positionName: ""
@@ -220,7 +221,8 @@ ColumnLayout {
         height: 62
         // qmllint enable Quick.layout-positioning
         color: view.controller.palettePanel
-        flags: Qt.FramelessWindowHint | Qt.Tool | Qt.NoDropShadowWindowHint
+        flags: Qt.FramelessWindowHint | Qt.Tool
+            | (view.controller.hideBorderShadow ? Qt.NoDropShadowWindowHint : 0)
         modality: Qt.NonModal
         transientParent: view.mainWindow
         onActiveChanged: if (visible && !active) hide()

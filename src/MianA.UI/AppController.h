@@ -38,6 +38,7 @@ class AppController : public QObject {
   Q_PROPERTY(QString themeColor READ themeColor NOTIFY stateChanged)
   Q_PROPERTY(int frameOpacity READ frameOpacity NOTIFY stateChanged)
   Q_PROPERTY(int textOpacity READ textOpacity NOTIFY stateChanged)
+  Q_PROPERTY(bool hideBorderShadow READ hideBorderShadow NOTIFY stateChanged)
   Q_PROPERTY(QString paletteBg READ paletteBg NOTIFY paletteChanged)
   Q_PROPERTY(QString palettePanel READ palettePanel NOTIFY paletteChanged)
   Q_PROPERTY(QString paletteHover READ paletteHover NOTIFY paletteChanged)
@@ -74,6 +75,7 @@ public:
   QString themeColor() const;
   int frameOpacity() const;
   int textOpacity() const;
+  bool hideBorderShadow() const;
   QString paletteBg() const;
   QString palettePanel() const;
   QString paletteHover() const;
@@ -106,7 +108,8 @@ public slots:
   void toggle(const QString &key);
   bool saveSettings(bool paused, bool floating, bool tray, bool autostart,
                     bool showIntraday, bool hideStockCode, bool autoTheme,
-                    const QString &color, int frameOpacity, int textOpacity);
+                    const QString &color, int frameOpacity, int textOpacity,
+                    bool hideBorderShadow);
   void initialRefresh();
   void manualRefresh();
   void refreshQuotes(bool force = false);
@@ -140,7 +143,7 @@ private:
   void maybeRefreshOnScheduleChange();
   void requestRefresh(bool force, bool showProgress);
   void applyQuoteBatch(int batchId, const QVector<QuoteResult> &results);
-  void refreshIntradayHistory();
+  void refreshIntradayHistory(bool force = true);
   void applyIntradayBatch(int batchId, const QVector<IntradayResult> &results);
   void syncTray();
 
@@ -161,6 +164,14 @@ private:
   QHash<QString, int> m_lastResultBatch;
   QHash<QString, int> m_lastSuccessBatch;
   QHash<QString, int> m_lastIntradayBatch;
+  struct IntradayRefresh {
+    int batchId = 0;
+    int failures = 0;
+    qint64 retryAt = 0;
+    QDate date;
+    bool pending = false;
+  };
+  QHash<QString, IntradayRefresh> m_intradayRefresh;
   QHash<QString, QDate> m_closedRefreshDates;
   QHash<QString, QDate> m_breakRefreshDates;
   bool m_pendingRefresh = false;

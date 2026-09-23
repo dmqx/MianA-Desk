@@ -29,6 +29,7 @@ public:
                                   const QDate &date) const;
   void requestQuotes(const QVector<QuoteRequest> &requests, int batchId);
   void requestIntraday(const QVector<QuoteRequest> &requests, int batchId);
+  void retryTradingCalendar(bool force = false);
   void abortAll();
 
 signals:
@@ -73,4 +74,5 @@ private:
   QDate m_cnCalendarLast;
   QVector<QPointer<QNetworkReply>> m_replies;
   QPointer<QNetworkReply> m_calendarReply;
+  qint64 m_calendarRetryAt = 0;
 };

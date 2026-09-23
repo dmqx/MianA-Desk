@@ -98,6 +98,8 @@ foreach(target MianA.Core MianA.Market MianA.Infrastructure MianA.Windows MianAD
 endforeach()
 target_compile_definitions(MianADesk PRIVATE
     MIANA_VERSION_STRING="${PROJECT_VERSION}"
+    MIANA_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    MIANA_VERSION_MINOR=${PROJECT_VERSION_MINOR}
 )
 install(TARGETS MianADesk BUNDLE DESTINATION . RUNTIME DESTINATION .)
 
@@ -146,7 +148,6 @@ if(WIN32)
             \"\${CMAKE_INSTALL_PREFIX}/qml/QtQuick/Controls/Universal\"
             \"\${CMAKE_INSTALL_PREFIX}/qml/QtQuick/Controls/FluentWinUI3\"
             \"\${CMAKE_INSTALL_PREFIX}/generic\"
-            \"\${CMAKE_INSTALL_PREFIX}/networkinformation\"
             \"\${CMAKE_INSTALL_PREFIX}/qmltooling\"
         )
         file(GLOB qt_translations

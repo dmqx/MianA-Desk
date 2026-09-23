@@ -71,6 +71,7 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   const int legacyOpacity = std::clamp(integer("theme_opacity", 95), 40, 95);
   settings.frameOpacity = std::clamp(integer("frame_opacity", legacyOpacity), 10, 100);
   settings.textOpacity = std::clamp(integer("text_opacity", legacyOpacity), 10, 100);
+  settings.hideBorderShadow = boolean("hide_border_shadow", false);
   const QString color =
       raw.value(QStringLiteral("theme_color")).toString().toUpper();
   static const QRegularExpression hexColor(QStringLiteral("^#[0-9A-F]{6}$"));
@@ -123,7 +124,8 @@ bool AppStore::save(const QVector<Position> &positions,
       {QStringLiteral("auto_theme"), settings.autoTheme},
       {QStringLiteral("theme_color"), settings.themeColor},
       {QStringLiteral("frame_opacity"), settings.frameOpacity},
-      {QStringLiteral("text_opacity"), settings.textOpacity}};
+      {QStringLiteral("text_opacity"), settings.textOpacity},
+      {QStringLiteral("hide_border_shadow"), settings.hideBorderShadow}};
   QJsonArray rawPositions;
   for (const auto &item : positions)
     rawPositions.append(

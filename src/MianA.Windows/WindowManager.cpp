@@ -362,12 +362,14 @@ bool WindowManager::nativeEventFilter(const QByteArray &eventType,
       emit showRequested();
       return true;
     }
-    // The widget lives in the tray and stays on top: swallow minimize
-    // commands (Alt+Space, Win+D's "show desktop") so it never flickers
-    // by being minimized and then restored.
+    // Keep only locked widgets from being minimized by Show Desktop.
     if (msg->message == WM_SYSCOMMAND &&
-        (msg->wParam & 0xFFF0) == SC_MINIMIZE)
-      return true;
+        (msg->wParam & 0xFFF0) == SC_MINIMIZE) {
+      for (const auto &window : std::as_const(m_windows))
+        if (window && reinterpret_cast<HWND>(window->winId()) == msg->hwnd &&
+            window->property("lockedMode").toBool())
+          return true;
+    }
     if (msg->message == WM_HOTKEY && msg->wParam == HotkeyId) {
       emit hotkeyActivated();
       return true;
@@ -450,9 +452,13 @@ void WindowManager::onWinEvent(quint32 event) {
   default:
     return;
   }
-  for (const auto &window : std::as_const(m_windows))
-    if (window)
-      applyTopmost(window);
+  const auto apply = [this] {
+    for (const auto &window : std::as_const(m_windows))
+      if (window)
+        applyTopmost(window);
+  };
+  // WinEvent callbacks are out-of-context; update windows on Qt's thread.
+  QTimer::singleShot(0, this, apply);
 }
 
 void WindowManager::applyTopmost(QWindow *window) {
@@ -489,17 +495,7 @@ void WindowManager::applyNativeWindowStyle(QWindow *window) {
   // reliable way to keep the widget tray-only.
   if (g_taskbarList)
     g_taskbarList->DeleteTab(hwnd);
-  if (!(window->flags() & Qt::WindowStaysOnTopHint))
-    return;
-  // Win+D (show desktop) can minimize the widget; bring it back so
-  // topmost mode keeps it visible.
-  if (IsIconic(hwnd))
-    ShowWindow(hwnd, SW_RESTORE);
-  // Move the window to the very top of the topmost band, i.e. above the
-  // taskbar as well (SetWindowPos with a specific handle would place it
-  // BEHIND that window, which is the opposite of what we need here).
-  SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  applyTopmost(window);
 #else
   Q_UNUSED(window);
 #endif
@@ -513,27 +509,16 @@ void WindowManager::applyDwm(QWindow *window) {
   const bool positionMenu =
       window->objectName() == QStringLiteral("positionMenu");
   const bool floating = window->property("floatingMode").toBool();
-  if (floating) {
-    const int ncRendering = DWMNCRP_DISABLED;
-    const int noRound = 1;
-    DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &ncRendering,
-                          sizeof(ncRendering));
-    DwmSetWindowAttribute(hwnd, 33, &noRound, sizeof(noRound));
-    const MARGINS margins{0, 0, 0, 0};
-    DwmExtendFrameIntoClientArea(hwnd, &margins);
-    applyNativeWindowStyle(window);
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
-                     SWP_NOACTIVATE | SWP_NOZORDER);
-    return;
-  }
+  const bool hideShadow = window->objectName() != QStringLiteral("settingsWindow") &&
+                          window->property("hideBorderShadow").toBool();
   // Respect Qt::FramelessWindowHint instead of forcing DWM to paint a
   // non-client strip above the custom QML title bar. The one-pixel frame
-  // extension below is kept so the main and compact windows retain their
-  // native DWM shadow.
-  const int ncRendering = positionMenu ? DWMNCRP_DISABLED
-                                       : DWMNCRP_USEWINDOWSTYLE;
-  const int rounded = 2;
+  // extension enables shadow for every non-settings window, including floating.
+  const int ncRendering = hideShadow ? DWMNCRP_DISABLED
+                                     : DWMNCRP_USEWINDOWSTYLE;
+  // QML paints the rounded alpha corners when the native shadow is hidden.
+  const int rounded = floating || positionMenu || hideShadow
+                          ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
   const int backdropNone = 1;
   const COLORREF noColor = 0xFFFFFFFE;
   DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &ncRendering,
@@ -541,10 +526,14 @@ void WindowManager::applyDwm(QWindow *window) {
   DwmSetWindowAttribute(hwnd, 33, &rounded, sizeof(rounded));
   DwmSetWindowAttribute(hwnd, 38, &backdropNone, sizeof(backdropNone));
   DwmSetWindowAttribute(hwnd, 34, &noColor, sizeof(noColor));
-  const MARGINS margins = positionMenu ? MARGINS{0, 0, 0, 0}
-                                       : MARGINS{0, 0, 0, 1};
+  const MARGINS margins = hideShadow ? MARGINS{0, 0, 0, 0}
+                                     : MARGINS{0, 0, 0, 1};
   DwmExtendFrameIntoClientArea(hwnd, &margins);
   applyNativeWindowStyle(window);
+  if (floating)
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOACTIVATE | SWP_NOZORDER);
 #else
   Q_UNUSED(window);
 #endif

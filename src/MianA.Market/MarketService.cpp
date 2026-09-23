@@ -203,6 +203,12 @@ void MarketService::requestIntraday(const QVector<QuoteRequest> &requests,
   }
 }
 
+void MarketService::retryTradingCalendar(bool force) {
+  if (!m_cnTradingCalendarLoaded && !m_calendarReply &&
+      (force || QDateTime::currentMSecsSinceEpoch() >= m_calendarRetryAt))
+    requestCnTradingCalendar();
+}
+
 void MarketService::abortAll() {
   // Invalidate batches before abort() can synchronously emit finished().
   m_batches.clear();
@@ -489,6 +495,7 @@ IntradayResult MarketService::parseYahooIntraday(const QByteArray &body,
 }
 
 void MarketService::requestCnTradingCalendar() {
+  m_calendarRetryAt = QDateTime::currentMSecsSinceEpoch() + 60000;
   QNetworkRequest request = configuredRequest(QUrl(QStringLiteral(
       "https://assets.linkdiary.cn/shares/trade-data-list.txt")));
   m_calendarReply = m_network.get(request);

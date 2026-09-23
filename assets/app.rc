@@ -1,2 +1,30 @@
-// MianA Desk v1.2 application resources
+// MianA Desk v1.3 application resources
+#include <winver.h>
+
 IDI_ICON1 ICON DISCARDABLE "miana_desk.ico"
+
+1 VERSIONINFO
+FILEVERSION MIANA_VERSION_MAJOR,MIANA_VERSION_MINOR,0,0
+PRODUCTVERSION MIANA_VERSION_MAJOR,MIANA_VERSION_MINOR,0,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS__WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "MianA Desk"
+      VALUE "FileVersion", MIANA_VERSION_STRING
+      VALUE "ProductName", "MianA Desk"
+      VALUE "ProductVersion", MIANA_VERSION_STRING
+      VALUE "OriginalFilename", "MianADesk.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

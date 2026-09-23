@@ -51,7 +51,7 @@ src/
 
 前往 [MianA Desk Releases](https://github.com/dmqx/MianA-Desk/releases) 下载最新版本。
 
-下载 `MianA Desk.exe` 后直接运行，无需安装。
+下载 `MianA-Desk-v1.3.exe` 后直接运行，无需安装。
 
 ### 源码构建
 
@@ -83,6 +83,7 @@ cmake --build .package-build `
 
 ```text
 .package-build/Release/MianA Desk.exe
+release/MianA-Desk-v1.3.exe
 ```
 
 如果 CMake 无法自动找到 Qt：

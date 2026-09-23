@@ -1,4 +1,4 @@
-# MianA Desk v1.2 release workflow
+# MianA Desk v1.3 release workflow
 name: Build Windows package
 
 on:
@@ -77,11 +77,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $notes = @"
-          1. 桌面端整体升级并重构为 C++23
-          2. UI 与运行框架升级至 Qt 6.11.2
-          3. 修复浮窗关闭后从托盘恢复时窗口模式丢失的问题
-          "@
+          $notes = "Release MianA Desk v1.3"
           if (gh release view "${{ github.ref_name }}" 2>$null) {
             gh release edit "${{ github.ref_name }}" --title "MianA Desk ${{ github.ref_name }}" --notes $notes
             gh release upload "${{ github.ref_name }}" "dist/MianA-Desk-${{ github.ref_name }}.exe" --clobber

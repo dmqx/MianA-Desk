@@ -18,4 +18,5 @@ struct AppSettings {
   QString themeColor = QStringLiteral("#FFFFFF");
   int frameOpacity = 95;
   int textOpacity = 95;
+  bool hideBorderShadow = false;
 };

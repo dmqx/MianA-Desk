@@ -3,6 +3,7 @@
 
 #include <QApplication>
 #include <QIcon>
+#include <QNetworkProxy>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -23,6 +24,7 @@
 int main(int argc, char *argv[]) {
   QQuickStyle::setStyle(QStringLiteral("Windows"));
   QApplication app(argc, argv);
+  QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::NoProxy));
 
   QCoreApplication::setApplicationName(QStringLiteral("MianA Desk"));
   QCoreApplication::setOrganizationName(QStringLiteral("MianA"));

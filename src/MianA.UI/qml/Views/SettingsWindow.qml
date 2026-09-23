@@ -12,7 +12,7 @@ Window {
     required property AppController controller
     required property Window mainWindow
     readonly property int pageWidth: 288
-    readonly property int pageHeight: 538
+    readonly property int pageHeight: 565
     readonly property int titleBarHeight: 40
     width: pageWidth
     height: pageHeight
@@ -118,7 +118,7 @@ Window {
             tray.checked, autostart.checked, showIntraday.checked,
             hideStockCode.checked, autoTheme.checked, themeColor.text,
             Math.round(frameOpacitySlider.value),
-            Math.round(textOpacitySlider.value))
+            Math.round(textOpacitySlider.value), hideBorderShadow.checked)
         if (!saved)
             syncFromController()
     }
@@ -150,6 +150,7 @@ Window {
         themeColor.text = controller.themeColor
         frameOpacitySlider.value = controller.frameOpacity
         textOpacitySlider.value = controller.textOpacity
+        hideBorderShadow.checked = controller.hideBorderShadow
         initializing = false
     }
 
@@ -266,6 +267,12 @@ Window {
                         Layout.preferredHeight: 25
                         id: autoTheme
                         text: "根据组件下方背景自动改变主题色"
+                        onToggled: settings.applySettings()
+                    }
+                    CompactCheckBox {
+                        Layout.preferredHeight: 25
+                        id: hideBorderShadow
+                        text: "隐藏边框阴影"
                         onToggled: settings.applySettings()
                     }
                 }

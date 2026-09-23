@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QGuiApplication>
 #include <QImage>
+#include <QNetworkInformation>
 #include <QPoint>
 #include <QPixmap>
 #include <QScreen>
@@ -50,9 +51,22 @@ AppController::AppController(WindowManager &windows, QObject *parent)
           &AppController::applyQuoteBatch);
   connect(&m_market, &MarketService::intradayReady, this,
           &AppController::applyIntradayBatch);
+  QNetworkInformation::loadDefaultBackend();
+  if (auto *network = QNetworkInformation::instance())
+    connect(network, &QNetworkInformation::reachabilityChanged, this,
+            [this](QNetworkInformation::Reachability reachability) {
+              if (reachability != QNetworkInformation::Reachability::Online ||
+                  m_shuttingDown || m_settings.paused)
+                return;
+              m_market.retryTradingCalendar(true);
+              requestRefresh(true, false);
+              refreshIntradayHistory();
+            });
   connect(&m_timer, &QTimer::timeout, this, [this] {
     refreshQuotes(false);
     maybeRefreshOnScheduleChange();
+    m_market.retryTradingCalendar();
+    refreshIntradayHistory(false);
   });
   connect(&m_windows, &WindowManager::showRequested, this,
           &AppController::showCurrent);
@@ -122,6 +136,9 @@ int AppController::frameOpacity() const {
 }
 int AppController::textOpacity() const {
   return m_preview ? m_preview->textOpacity : m_settings.textOpacity;
+}
+bool AppController::hideBorderShadow() const {
+  return m_settings.hideBorderShadow;
 }
 QString AppController::paletteBg() const {
   return palette().value(QStringLiteral("bg"));
@@ -309,6 +326,7 @@ QString AppController::editPosition(const QString &positionId,
     m_lastResultBatch[positionId] = m_nextBatchId;
     m_lastSuccessBatch[positionId] = m_nextBatchId;
     m_lastIntradayBatch[positionId] = m_nextBatchId;
+    m_intradayRefresh.remove(positionId);
   }
   m_model.notifyPosition(positionId);
   emit focusChanged();
@@ -334,6 +352,7 @@ void AppController::deletePosition(const QString &positionId) {
   m_lastResultBatch.remove(positionId);
   m_lastSuccessBatch.remove(positionId);
   m_lastIntradayBatch.remove(positionId);
+  m_intradayRefresh.remove(positionId);
   emit stateChanged();
   emit focusChanged();
 }
@@ -417,6 +436,7 @@ void AppController::toggle(const QString &key) {
       setStatus(QStringLiteral("等待刷新"), QStringLiteral("#657582"));
       requestRefresh(true, false);
       maybeRefreshOnScheduleChange();
+      refreshIntradayHistory();
     }
   }
 }
@@ -425,7 +445,8 @@ bool AppController::saveSettings(bool pausedValue, bool floatingValue,
                                  bool tray, bool autostartValue,
                                  bool showIntradayValue, bool hideStockCodeValue,
                                  bool automatic, const QString &color,
-                                 int frameOpacityValue, int textOpacityValue) {
+                                 int frameOpacityValue, int textOpacityValue,
+                                 bool hideBorderShadowValue) {
   const AppSettings previous = m_settings;
   const bool wasPaused = m_settings.paused;
   QColor normalized(color);
@@ -440,6 +461,7 @@ bool AppController::saveSettings(bool pausedValue, bool floatingValue,
       normalized.isValid() ? normalized.name().toUpper() : previous.themeColor;
   m_settings.frameOpacity = std::clamp(frameOpacityValue, 10, 100);
   m_settings.textOpacity = std::clamp(textOpacityValue, 10, 100);
+  m_settings.hideBorderShadow = hideBorderShadowValue;
   if (!saveStore()) {
     m_settings = previous;
     emit stateChanged();
@@ -453,7 +475,8 @@ bool AppController::saveSettings(bool pausedValue, bool floatingValue,
               QStringLiteral("#E88B00"));
   emit paletteChanged();
   emit stateChanged();
-  if (previous.floating != m_settings.floating)
+  if (previous.floating != m_settings.floating ||
+      previous.hideBorderShadow != m_settings.hideBorderShadow)
     m_windows.refreshWindowStyle();
   syncTray();
   if (m_settings.paused)
@@ -467,6 +490,7 @@ bool AppController::saveSettings(bool pausedValue, bool floatingValue,
     if (!pausedValue) {
       requestRefresh(true, false);
       maybeRefreshOnScheduleChange();
+      refreshIntradayHistory();
     }
   }
   return autostartOk;
@@ -477,7 +501,11 @@ void AppController::initialRefresh() {
   refreshIntradayHistory();
   maybeRefreshOnScheduleChange();
 }
-void AppController::manualRefresh() { requestRefresh(true, true); }
+void AppController::manualRefresh() {
+  m_market.retryTradingCalendar(true);
+  requestRefresh(true, true);
+  refreshIntradayHistory();
+}
 void AppController::checkForUpdates(bool notifyIfCurrent) {
   m_checkUpdatesNotify = m_checkUpdatesNotify || notifyIfCurrent;
   if (notifyIfCurrent)
@@ -491,6 +519,28 @@ void AppController::maybeRefreshOnScheduleChange() {
     return;
   QStringList markets;
   const auto loopUtc = QDateTime::currentDateTimeUtc();
+  bool cleared = false;
+  for (auto &item : m_model.positions()) {
+    const QString market = MarketRules::marketKey(item.symbol);
+    const auto local = loopUtc.toTimeZone(MarketRules::timeZone(market));
+    const QDate date = local.date();
+    const int minute = local.time().hour() * 60 + local.time().minute();
+    if (minute < 540 || item.intradayDate >= date ||
+        !m_market.isTradingDay(item.symbol, date))
+      continue;
+    item.intraday.clear();
+    item.intradayMinutes.clear();
+    item.intradayMinute = 0;
+    item.intradayDate = date;
+    item.changePercent = 0;
+    item.hasChange = false;
+    m_model.notifyPosition(item.id, {PositionModel::ChangePercentRole,
+                                     PositionModel::HasChangeRole,
+                                     PositionModel::IntradayRole});
+    cleared = true;
+  }
+  if (cleared)
+    emit focusChanged();
   for (const auto &item : m_model.positions()) {
     const QString market = MarketRules::marketKey(item.symbol);
     const auto local = loopUtc.toTimeZone(MarketRules::timeZone(market));
@@ -526,6 +576,12 @@ void AppController::maybeRefreshOnScheduleChange() {
     else
       m_closedRefreshDates.insert(market, date);
     requestRefresh(true, false);
+    // 行情源的午休/收盘最终快照可能晚于本地时钟数秒到达。
+    for (const int delay : {5000, 15000})
+      QTimer::singleShot(delay, this, [this] {
+        if (!m_shuttingDown && !m_settings.paused)
+          requestRefresh(true, false);
+      });
     return;
   }
 }
@@ -592,9 +648,24 @@ void AppController::applyQuoteBatch(int batchId,
       item->previousClose = result.previousClose;
       item->hasChange = result.hasChange;
       item->updatedAt = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+      const QDate marketDate = m_market.marketDate(item->symbol);
+      const QDate quoteDate =
+          result.marketTimestamp > 0
+              ? QDateTime::fromSecsSinceEpoch(result.marketTimestamp,
+                                              QTimeZone::UTC)
+                    .toTimeZone(MarketRules::timeZone(
+                        MarketRules::marketKey(item->symbol)))
+                    .date()
+              : marketDate;
+      if (m_market.isTradingDay(item->symbol, marketDate) &&
+          quoteDate < marketDate) {
+        item->changePercent = 0;
+        item->hasChange = false;
+      }
       IntradaySeries::appendLiveQuote(
           *item, result,
-          m_market.isTradingDay(item->symbol, m_market.marketDate(item->symbol)));      item->error.clear();
+          m_market.isTradingDay(item->symbol, m_market.marketDate(item->symbol)));
+      item->error.clear();
       item->failureCount = 0;
       item->retryAfter = 0.0;
       m_lastSuccessBatch[item->id] = batchId;
@@ -638,14 +709,29 @@ void AppController::applyQuoteBatch(int batchId,
   }
 }
 
-void AppController::refreshIntradayHistory() {
+void AppController::refreshIntradayHistory(bool force) {
+  if (m_shuttingDown || (m_settings.paused && !force))
+    return;
+  const qint64 now = QDateTime::currentMSecsSinceEpoch();
   QVector<QuoteRequest> requests;
   requests.reserve(m_model.positions().size());
-  for (const auto &item : m_model.positions())
+  const int batchId = m_nextBatchId + 1;
+  for (const auto &item : m_model.positions()) {
+    auto &state = m_intradayRefresh[item.id];
+    const QDate date = m_market.marketDate(item.symbol);
+    if (state.batchId != 0) {
+      state.pending = state.pending || force || state.date != date;
+      continue;
+    }
+    if (!force && state.date == date && now < state.retryAt)
+      continue;
+    state.batchId = batchId;
+    state.date = date;
     requests.push_back({item.id, item.symbol});
+  }
   if (requests.isEmpty())
     return;
-  const int batchId = ++m_nextBatchId;
+  m_nextBatchId = batchId;
   m_market.requestIntraday(requests, batchId);
 }
 
@@ -654,16 +740,31 @@ void AppController::applyIntradayBatch(int batchId,
   if (m_shuttingDown)
     return;
   for (const auto &result : results) {
-    if (!result.success || !result.tradingDate.isValid())
-      continue;
     auto *item = m_model.find(result.positionId);
     if (!item || item->symbol != result.symbol ||
-        batchId <= m_lastIntradayBatch.value(item->id) ||
-        result.tradingDate < item->intradayDate)
+        batchId <= m_lastIntradayBatch.value(item->id))
       continue;
-    if (!IntradaySeries::mergeHistory(*item, result))
-      continue;    m_lastIntradayBatch[item->id] = batchId;
-    m_model.notifyPosition(item->id, {PositionModel::IntradayRole});
+    auto stateIt = m_intradayRefresh.find(item->id);
+    if (stateIt == m_intradayRefresh.end() || stateIt->batchId != batchId)
+      continue;
+    auto &state = stateIt.value();
+    state.batchId = 0;
+    const bool merged = result.success && result.tradingDate.isValid() &&
+                        result.tradingDate >= item->intradayDate &&
+                        IntradaySeries::mergeHistory(*item, result);
+    int delayMs = 0;
+    if (merged) {
+      state.failures = 0;
+      // Periodic reconciliation also fills gaps after sleep or missed network events.
+      delayMs = m_market.isMarketOpen(item->symbol) ? 60000 : 900000;
+      m_lastIntradayBatch[item->id] = batchId;
+      m_model.notifyPosition(item->id, {PositionModel::IntradayRole});
+    } else {
+      state.failures = std::min(state.failures + 1, 6);
+      delayMs = std::min(15000 * (1 << (state.failures - 1)), 300000);
+    }
+    state.retryAt = state.pending ? 0 : QDateTime::currentMSecsSinceEpoch() + delayMs;
+    state.pending = false;
   }
 }
 

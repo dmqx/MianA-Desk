@@ -9,7 +9,7 @@
     {
       "name": "windows-msvc-release",
       "displayName": "Windows x64 Release",
-      "description": "MianA Desk · C++23 · Qt 6.11.2",
+      "description": "Release MianA Desk v1.3 · C++23 · Qt 6.11.2",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "${sourceDir}/.build",
       "cacheVariables": {

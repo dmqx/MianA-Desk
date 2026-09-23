@@ -12,12 +12,11 @@ Item {
     // fixed-size tool window back inward when the drag is released.
     MouseArea {
         anchors.fill: parent
-        enabled: !view.controller.locked
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         property real pressedX: 0
         property real pressedY: 0
         onPressed: function(mouse) {
-            if (mouse.button === Qt.LeftButton) {
+            if (mouse.button === Qt.LeftButton && !view.controller.locked) {
                 pressedX = mouse.x
                 pressedY = mouse.y
             }
@@ -30,7 +29,7 @@ Item {
             }
         }
         onPositionChanged: function(mouse) {
-            if (pressedButtons & Qt.LeftButton) {
+            if (!view.controller.locked && pressedButtons & Qt.LeftButton) {
                 view.mainWindow.x = Math.round(view.mainWindow.x + mouse.x - pressedX)
                 view.mainWindow.y = Math.round(view.mainWindow.y + mouse.y - pressedY)
             }

@@ -10,6 +10,7 @@ Window {
     id: dialog
     objectName: "positionEditor"
     required property AppController controller
+    property bool hideBorderShadow: controller.hideBorderShadow
     required property Window mainWindow
     property string editingId: ""
     readonly property int pageWidth: 232
@@ -22,7 +23,8 @@ Window {
     color: "transparent"
     modality: Qt.ApplicationModal
     transientParent: mainWindow
-    flags: Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint
+    flags: Qt.FramelessWindowHint
+        | (controller.hideBorderShadow ? Qt.NoDropShadowWindowHint : 0)
         | Qt.Tool | Qt.WindowStaysOnTopHint
     width: pageWidth
     height: pageHeight
@@ -74,7 +76,7 @@ Window {
     Rectangle {
         anchors.fill: parent
         color: dialog.controller.paletteBg
-        radius: 0
+        radius: dialog.controller.hideBorderShadow ? 8 : 0
     }
 
     ColumnLayout {

@@ -24,7 +24,7 @@ ColumnLayout {
             Label { text: "●"; color: view.controller.statusColor; font.family: "Arial"; font.pixelSize: 8 }
             Label { text: view.controller.statusText; color: view.controller.paletteMuted; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
             Components.AppButton { controller: view.controller; text: view.controller.locked ? "锁" : "移"; onClicked: view.controller.toggle("locked") }
-            Components.AppButton { controller: view.controller; text: view.controller.topmost ? "顶" : "层"; onClicked: view.controller.toggle("topmost") }
+            Components.AppButton { controller: view.controller; text: view.controller.topmost ? "顶" : "底"; onClicked: view.controller.toggle("topmost") }
             Components.AppButton { controller: view.controller; text: "展"; onClicked: view.controller.toggle("compact") }
             Components.AppButton { controller: view.controller; text: "浮"; onClicked: view.controller.toggle("floating") }
             Components.AppButton { controller: view.controller; text: "×"; font.pixelSize: 14; onClicked: view.mainWindow.close() }
