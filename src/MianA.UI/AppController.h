@@ -27,7 +27,6 @@ class AppController : public QObject {
   Q_PROPERTY(int savedY READ savedY NOTIFY stateChanged)
   Q_PROPERTY(bool topmost READ topmost NOTIFY stateChanged)
   Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
-  Q_PROPERTY(bool compact READ compact NOTIFY stateChanged)
   Q_PROPERTY(bool floating READ floating NOTIFY stateChanged)
   Q_PROPERTY(bool paused READ paused NOTIFY stateChanged)
   Q_PROPERTY(bool autoTheme READ autoTheme NOTIFY stateChanged)
@@ -64,7 +63,6 @@ public:
   int savedY() const;
   bool topmost() const;
   bool locked() const;
-  bool compact() const;
   bool floating() const;
   bool paused() const;
   bool autoTheme() const;
@@ -89,6 +87,7 @@ public:
   QString focusedSymbol() const;
   QString focusedName() const;
   QString focusedPrice() const;
+  Q_INVOKABLE QVariantMap orderBook(const QString &positionId) const;
 
 public slots:
   void setWindowPosition(int x, int y);
@@ -100,9 +99,8 @@ public slots:
   void deletePosition(const QString &positionId);
   void movePosition(int source, int destination);
   void showCurrent();
-  void showFull();
+  void showWidget();
   void toggleFloatingAndShow();
-  void setAutostart(bool enabled);
   void previewAppearance(bool autoTheme, const QString &color, int frameOpacity,
                          int textOpacity);
   void toggle(const QString &key);

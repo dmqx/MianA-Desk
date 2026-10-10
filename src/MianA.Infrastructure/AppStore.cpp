@@ -60,7 +60,6 @@ bool AppStore::load(QVector<Position> &positions, AppSettings &settings) {
   settings.y = integer("y", 80);
   settings.topmost = boolean("topmost", true);
   settings.locked = boolean("locked", false);
-  settings.compact = boolean("compact", false);
   settings.floating = boolean("floating", false);
   settings.showIntraday = boolean("show_intraday", true);
   settings.hideStockCode = boolean("hide_stock_code", false);
@@ -114,7 +113,6 @@ bool AppStore::save(const QVector<Position> &positions,
       {QStringLiteral("y"), settings.y},
       {QStringLiteral("topmost"), settings.topmost},
       {QStringLiteral("locked"), settings.locked},
-      {QStringLiteral("compact"), settings.compact},
       {QStringLiteral("floating"), settings.floating},
       {QStringLiteral("show_intraday"), settings.showIntraday},
       {QStringLiteral("hide_stock_code"), settings.hideStockCode},

@@ -10,6 +10,10 @@
 #include <QEvent>
 #include <QFileInfo>
 #include <QIcon>
+#include <QImage>
+#include <QPoint>
+#include <QPixmap>
+#include <QScreen>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QLockFile>
@@ -31,6 +35,8 @@
 #pragma comment(lib, "ole32.lib")
 #endif
 #include <utility>
+#include <algorithm>
+#include <cwchar>
 
 #ifdef Q_OS_WIN
 namespace {
@@ -234,25 +240,17 @@ void WindowManager::initializeTray() {
   auto *compactMenuStyle = new CompactTrayMenuStyle();
   compactMenuStyle->setParent(menu);
   menu->setStyle(compactMenuStyle);
-  auto *show = menu->addAction(QStringLiteral("显示完整组件"));
+  auto *show = menu->addAction(QStringLiteral("显示主页面"));
   menu->addSeparator();
-  auto *floating = menu->addAction(QStringLiteral("自由浮窗模式"));
+  auto *floating = menu->addAction(QStringLiteral("浮窗模式"));
   floating->setCheckable(true);
-  auto *paused = menu->addAction(QStringLiteral("暂停行情刷新"));
-  paused->setCheckable(true);
-  auto *autostart = menu->addAction(QStringLiteral("开机自动启动"));
-  autostart->setCheckable(true);
   auto *checkUpdate = menu->addAction(QStringLiteral("检查更新"));
   auto *settings = menu->addAction(QStringLiteral("设置"));
   menu->addSeparator();
   auto *quit = menu->addAction(QStringLiteral("退出"));
-  connect(show, &QAction::triggered, this, &WindowManager::showFullRequested);
+  connect(show, &QAction::triggered, this, &WindowManager::showWidgetRequested);
   connect(floating, &QAction::triggered, this,
           &WindowManager::toggleFloatingRequested);
-  connect(paused, &QAction::triggered, this,
-          &WindowManager::togglePausedRequested);
-  connect(autostart, &QAction::triggered, this,
-          &WindowManager::autostartRequested);
   connect(settings, &QAction::triggered, this,
           &WindowManager::settingsRequested);
   connect(checkUpdate, &QAction::triggered, this,
@@ -272,8 +270,6 @@ void WindowManager::initializeTray() {
               emit showRequested();
           });
   m_trayActions.insert(QStringLiteral("floating"), floating);
-  m_trayActions.insert(QStringLiteral("paused"), paused);
-  m_trayActions.insert(QStringLiteral("autostart"), autostart);
   m_tray->show();
 }
 
@@ -297,16 +293,10 @@ void WindowManager::refreshWindowStyle() {
       scheduleDwm(window);
 }
 
-void WindowManager::setTrayState(bool floating, bool paused, bool autostart) {
+void WindowManager::setTrayState(bool floating) {
   if (auto *action = qobject_cast<QAction *>(
           m_trayActions.value(QStringLiteral("floating"))))
     action->setChecked(floating);
-  if (auto *action = qobject_cast<QAction *>(
-          m_trayActions.value(QStringLiteral("paused"))))
-    action->setChecked(paused);
-  if (auto *action = qobject_cast<QAction *>(
-          m_trayActions.value(QStringLiteral("autostart"))))
-    action->setChecked(autostart);
 }
 
 void WindowManager::showTrayMessage(const QString &title,
@@ -506,8 +496,6 @@ void WindowManager::applyDwm(QWindow *window) {
   const HWND hwnd = reinterpret_cast<HWND>(window->winId());
   if (!hwnd)
     return;
-  const bool positionMenu =
-      window->objectName() == QStringLiteral("positionMenu");
   const bool floating = window->property("floatingMode").toBool();
   const bool hideShadow = window->objectName() != QStringLiteral("settingsWindow") &&
                           window->property("hideBorderShadow").toBool();
@@ -517,7 +505,7 @@ void WindowManager::applyDwm(QWindow *window) {
   const int ncRendering = hideShadow ? DWMNCRP_DISABLED
                                      : DWMNCRP_USEWINDOWSTYLE;
   // QML paints the rounded alpha corners when the native shadow is hidden.
-  const int rounded = floating || positionMenu || hideShadow
+  const int rounded = floating || hideShadow
                           ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
   const int backdropNone = 1;
   const COLORREF noColor = 0xFFFFFFFE;
@@ -537,4 +525,96 @@ void WindowManager::applyDwm(QWindow *window) {
 #else
   Q_UNUSED(window);
 #endif
+}
+
+QColor WindowManager::sampleUnderlay(int x, int y, int width, int height) const {
+#ifdef Q_OS_WIN
+  QWindow *mainWindow = nullptr;
+  for (QWindow *window : QGuiApplication::allWindows()) {
+    if (window && window->isVisible() &&
+        window->geometry() == QRect(x, y, width, height)) {
+      mainWindow = window;
+      break;
+    }
+  }
+  if (!mainWindow)
+    return {};
+  RECT clientRect{};
+  POINT clientOrigin{};
+  const HWND mainHwnd = reinterpret_cast<HWND>(mainWindow->winId());
+  if (!GetClientRect(mainHwnd, &clientRect) ||
+      !ClientToScreen(mainHwnd, &clientOrigin) || clientRect.right <= 0 ||
+      clientRect.bottom <= 0)
+    return {};
+  const qreal scaleX = static_cast<qreal>(clientRect.right) / mainWindow->width();
+  const qreal scaleY = static_cast<qreal>(clientRect.bottom) / mainWindow->height();
+  const auto nativePoint = [&](QPoint point) {
+    return POINT{clientOrigin.x + qRound((point.x() - x) * scaleX),
+                 clientOrigin.y + qRound((point.y() - y) * scaleY)};
+  };
+  const auto isDesktopWindow = [](HWND hwnd) {
+    wchar_t className[64]{};
+    return hwnd && GetClassNameW(hwnd, className, 64) &&
+           (wcscmp(className, L"Progman") == 0 ||
+            wcscmp(className, L"WorkerW") == 0);
+  };
+  const POINT center = nativePoint({x + width / 2, y + height / 2});
+  HWND underlay = nullptr;
+  for (HWND hwnd = GetWindow(mainHwnd, GW_HWNDNEXT); hwnd;
+       hwnd = GetWindow(hwnd, GW_HWNDNEXT)) {
+    RECT rect{};
+    if (IsWindowVisible(hwnd) && !IsIconic(hwnd) && GetWindowRect(hwnd, &rect) &&
+        center.x >= rect.left && center.x < rect.right &&
+        center.y >= rect.top && center.y < rect.bottom) {
+      DWORD cloaked = 0;
+      if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked,
+                                         sizeof(cloaked))) && cloaked)
+        continue;
+      underlay = hwnd;
+      break;
+    }
+  }
+  if (!underlay)
+    return {};
+  const bool desktopUnderlay =
+      isDesktopWindow(GetAncestor(underlay, GA_ROOT));
+#endif
+  QList<int> reds, greens, blues;
+  const int margin = 18;
+  const QList<QPoint> points{{x - margin, y + height * 3 / 10},
+                             {x + width + margin, y + height * 3 / 10},
+                             {x + width * 3 / 10, y - margin},
+                             {x + width * 3 / 10, y + height + margin},
+                             {x - margin, y + height * 7 / 10},
+                             {x + width + margin, y + height * 7 / 10}};
+  for (const QPoint &point : points) {
+#ifdef Q_OS_WIN
+    const POINT native = nativePoint(point);
+    const HWND sampledWindow = GetAncestor(WindowFromPoint(native), GA_ROOT);
+    if (desktopUnderlay ? !isDesktopWindow(sampledWindow)
+                        : sampledWindow != underlay)
+      continue;
+#endif
+    QScreen *screen = QGuiApplication::screenAt(point);
+    if (!screen)
+      continue;
+    const QImage image =
+        screen
+            ->grabWindow(0, point.x() - screen->geometry().x(),
+                         point.y() - screen->geometry().y(), 1, 1)
+            .toImage();
+    if (image.isNull())
+      continue;
+    const QColor color = image.pixelColor(0, 0);
+    reds.push_back(color.red());
+    greens.push_back(color.green());
+    blues.push_back(color.blue());
+  }
+  if (reds.isEmpty())
+    return {};
+  auto median = [](QList<int> values) {
+    std::sort(values.begin(), values.end());
+    return values.at(values.size() / 2);
+  };
+  return QColor(median(reds), median(greens), median(blues));
 }

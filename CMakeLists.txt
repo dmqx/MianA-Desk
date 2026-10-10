@@ -73,13 +73,14 @@ qt_add_qml_module(MianADesk
     VERSION 1.0
     QML_FILES
         src/MianA.UI/qml/Main.qml
-        src/MianA.UI/qml/Views/MainWindow.qml
+        src/MianA.UI/qml/Views/WatchlistWindow.qml
         src/MianA.UI/qml/Views/CompactWindow.qml
         src/MianA.UI/qml/Views/FloatingWindow.qml
         src/MianA.UI/qml/Views/SettingsWindow.qml
         src/MianA.UI/qml/Views/PositionEditor.qml
+        src/MianA.UI/qml/Controls/ActionPanel.qml
+        src/MianA.UI/qml/Controls/DepthPanel.qml
         src/MianA.UI/qml/Controls/AppButton.qml
-        src/MianA.UI/qml/Controls/PositionCard.qml
         src/MianA.UI/qml/Controls/CompactCard.qml
         src/MianA.UI/qml/Controls/Sparkline.qml
     RESOURCES assets/miana_desk.ico assets/miana_desk.png

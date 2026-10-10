@@ -7,7 +7,6 @@ struct AppSettings {
   int y = 80;
   bool topmost = true;
   bool locked = false;
-  bool compact = false;
   bool floating = false;
   bool showIntraday = true;
   bool hideStockCode = false;

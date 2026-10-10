@@ -5,12 +5,7 @@
 #include "MianA.Windows/WindowManager.h"
 
 #include <QDateTime>
-#include <QGuiApplication>
-#include <QImage>
 #include <QNetworkInformation>
-#include <QPoint>
-#include <QPixmap>
-#include <QScreen>
 #include <QTime>
 #include <QUuid>
 #include <algorithm>
@@ -118,7 +113,6 @@ int AppController::savedX() const { return m_settings.x; }
 int AppController::savedY() const { return m_settings.y; }
 bool AppController::topmost() const { return m_settings.topmost; }
 bool AppController::locked() const { return m_settings.locked; }
-bool AppController::compact() const { return m_settings.compact; }
 bool AppController::floating() const { return m_settings.floating; }
 bool AppController::paused() const { return m_settings.paused; }
 bool AppController::autoTheme() const {
@@ -191,6 +185,32 @@ QString AppController::focusedPrice() const {
   return item && item->price > 0.0
              ? PositionModel::formatPrice(item->price, item->precision)
              : QStringLiteral("--");
+}
+
+QVariantMap AppController::orderBook(const QString &positionId) const {
+  const auto *item = m_model.find(positionId);
+  if (!item)
+    return {};
+  QVariantList rows;
+  const bool available = item->error.isEmpty() && item->bids.size() == 5 && item->asks.size() == 5;
+  if (available) {
+    for (int i = 0; i < 10; ++i) {
+      const bool sell = i < 5;
+      const int level = sell ? 4 - i : i - 5;
+      const auto &entry = sell ? item->asks.at(level) : item->bids.at(level);
+      rows.append(QVariantMap{
+          {QStringLiteral("label"), (sell ? QStringLiteral("卖") : QStringLiteral("买")) + QString::number(level + 1)},
+          {QStringLiteral("price"), entry.price > 0 ? PositionModel::formatPrice(entry.price, item->precision) : QStringLiteral("--")},
+          {QStringLiteral("volume"), entry.price > 0 ? QString::number(entry.volume, 'f', entry.volume == std::floor(entry.volume) ? 0 : 2) : QStringLiteral("--")}});
+    }
+  }
+  return {{QStringLiteral("name"), item->name},
+          {QStringLiteral("rows"), rows},
+          {QStringLiteral("hasChange"), item->hasChange},
+          {QStringLiteral("changePercent"), item->changePercent},
+          {QStringLiteral("message"), !item->error.isEmpty() ? QStringLiteral("行情更新失败")
+              : available ? QString{} : QStringLiteral("暂无五档数据")},
+          {QStringLiteral("source"), item->source}};
 }
 
 QHash<QString, QString> AppController::palette() const {
@@ -309,6 +329,8 @@ QString AppController::editPosition(const QString &positionId,
     item->error.clear();
     item->source.clear();
     item->failureCount = 0;
+    item->bids.clear();
+    item->asks.clear();
     item->intraday.clear();
     item->intradayMinute = 0;
     item->intradayMinutes.clear();
@@ -365,15 +387,11 @@ void AppController::movePosition(int source, int destination) {
 
 void AppController::showCurrent() { emit showMainRequested(); }
 
-void AppController::showFull() {
-  const bool changed = m_settings.floating || m_settings.compact;
-  const bool oldFloating = m_settings.floating, oldCompact = m_settings.compact;
+void AppController::showWidget() {
+  const bool changed = m_settings.floating;
   m_settings.floating = false;
-  m_settings.compact = false;
-  if (changed && !saveStore()) {
-    m_settings.floating = oldFloating;
-    m_settings.compact = oldCompact;
-  }
+  if (changed && !saveStore())
+    m_settings.floating = true;
   if (changed) {
     emit stateChanged();
     m_windows.refreshWindowStyle();
@@ -384,13 +402,6 @@ void AppController::showFull() {
 void AppController::toggleFloatingAndShow() {
   toggle(QStringLiteral("floating"));
   emit showMainRequested();
-}
-void AppController::setAutostart(bool enabled) {
-  if (!m_windows.setAutostart(enabled))
-    setStatus(QStringLiteral("开机启动设置失败，请检查系统权限"),
-              QStringLiteral("#E88B00"));
-  emit stateChanged();
-  syncTray();
 }
 void AppController::previewAppearance(bool automatic, const QString &color,
                                       int frameOpacityValue,
@@ -411,8 +422,6 @@ void AppController::toggle(const QString &key) {
     setting = &m_settings.topmost;
   else if (key == QStringLiteral("locked"))
     setting = &m_settings.locked;
-  else if (key == QStringLiteral("compact"))
-    setting = &m_settings.compact;
   else if (key == QStringLiteral("floating"))
     setting = &m_settings.floating;
   else if (key == QStringLiteral("paused"))
@@ -642,6 +651,8 @@ void AppController::applyQuoteBatch(int batchId,
       item->currency = result.currency;
       item->precision = result.precision;
       item->source = result.source;
+      item->bids = result.bids;
+      item->asks = result.asks;
       if (!item->customName && !result.name.isEmpty())
         item->name = result.name;
       item->changePercent = result.changePercent;
@@ -786,37 +797,9 @@ QString AppController::marketSummary() const {
 void AppController::sampleTheme(int x, int y, int width, int height) {
   if (!autoTheme())
     return;
-  QList<int> reds, greens, blues;
-  const int margin = 18;
-  const QList<QPoint> points{{x - margin, y + height * 3 / 10},
-                             {x + width + margin, y + height * 3 / 10},
-                             {x + width * 3 / 10, y - margin},
-                             {x + width * 3 / 10, y + height + margin},
-                             {x - margin, y + height * 7 / 10},
-                             {x + width + margin, y + height * 7 / 10}};
-  for (const QPoint &point : points) {
-    QScreen *screen = QGuiApplication::screenAt(point);
-    if (!screen)
-      continue;
-    const QImage image =
-        screen
-            ->grabWindow(0, point.x() - screen->geometry().x(),
-                         point.y() - screen->geometry().y(), 1, 1)
-            .toImage();
-    if (image.isNull())
-      continue;
-    const QColor color = image.pixelColor(0, 0);
-    reds.push_back(color.red());
-    greens.push_back(color.green());
-    blues.push_back(color.blue());
-  }
-  if (reds.isEmpty())
+  const QColor sampled = m_windows.sampleUnderlay(x, y, width, height);
+  if (!sampled.isValid())
     return;
-  auto median = [](QList<int> values) {
-    std::sort(values.begin(), values.end());
-    return values.at(values.size() / 2);
-  };
-  const QColor sampled(median(reds), median(greens), median(blues));
   if (!m_underlayColor ||
       std::abs(sampled.red() - m_underlayColor->red()) +
               std::abs(sampled.green() - m_underlayColor->green()) +
@@ -846,7 +829,7 @@ void AppController::scheduleSave() {
     m_saveTimer.start();
 }
 void AppController::syncTray() {
-  m_windows.setTrayState(floating(), paused(), autostart());
+  m_windows.setTrayState(floating());
 }
 void AppController::saveAndShutdown() {
   if (m_shuttingDown)

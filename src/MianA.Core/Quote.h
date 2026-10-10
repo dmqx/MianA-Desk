@@ -5,6 +5,11 @@
 #include <QString>
 #include <QVector>
 
+struct BookLevel {
+  double price = 0.0;
+  double volume = 0.0; // A-share lots (100 shares).
+};
+
 struct QuoteRequest {
   QString positionId;
   QString symbol;
@@ -24,6 +29,8 @@ struct QuoteResult {
   double previousClose = 0.0;
   bool hasChange = false;
   QString error;
+  QVector<BookLevel> bids;
+  QVector<BookLevel> asks;
 };
 
 struct IntradayResult {

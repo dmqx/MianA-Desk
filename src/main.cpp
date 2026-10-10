@@ -42,14 +42,8 @@ int main(int argc, char *argv[]) {
                    &QCoreApplication::quit);
   QObject::connect(&windows, &WindowManager::toggleFloatingRequested,
                    &controller, &AppController::toggleFloatingAndShow);
-  QObject::connect(&windows, &WindowManager::showFullRequested, &controller,
-                   &AppController::showFull);
-  QObject::connect(&windows, &WindowManager::togglePausedRequested,
-                   &controller, [&controller] {
-                     controller.toggle(QStringLiteral("paused"));
-                   });
-  QObject::connect(&windows, &WindowManager::autostartRequested, &controller,
-                   &AppController::setAutostart);
+  QObject::connect(&windows, &WindowManager::showWidgetRequested, &controller,
+                   &AppController::showWidget);
   QObject::connect(&windows, &WindowManager::settingsRequested, &controller,
                    &AppController::settingsRequested);
   QObject::connect(&windows, &WindowManager::checkUpdatesRequested,
@@ -77,8 +71,7 @@ int main(int argc, char *argv[]) {
   // Preserve that order so the QApplication style, palette and fonts have
   // completed the same initialization before QMenu snapshots them.
   windows.initializeTray();
-  windows.setTrayState(controller.floating(), controller.paused(),
-                       controller.autostart());
+  windows.setTrayState(controller.floating());
   QObject::connect(&app, &QGuiApplication::focusWindowChanged, &windows,
                    [&windows](QWindow *window) {
                      if (window)

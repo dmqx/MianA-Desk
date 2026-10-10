@@ -266,7 +266,7 @@ Window {
                     CompactCheckBox {
                         Layout.preferredHeight: 25
                         id: autoTheme
-                        text: "根据组件下方背景自动改变主题色"
+                        text: "自动选取主题颜色"
                         onToggled: settings.applySettings()
                     }
                     CompactCheckBox {
@@ -301,7 +301,7 @@ Window {
                     CompactCheckBox { Layout.preferredHeight: 25; id: showIntraday; text: "展示分时图"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: hideStockCode; text: "隐藏股票代码"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: paused; text: "暂停行情刷新"; onToggled: settings.applySettings() }
-                    CompactCheckBox { Layout.preferredHeight: 25; id: floating; text: "自由浮窗模式"; onToggled: settings.applySettings() }
+                    CompactCheckBox { Layout.preferredHeight: 25; id: floating; text: "浮窗模式"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: autostart; text: "Windows 开机自动启动"; onToggled: settings.applySettings() }
                     CompactCheckBox { Layout.preferredHeight: 25; id: tray; text: "关闭时最小化到系统托盘"; onToggled: settings.applySettings() }
                 }

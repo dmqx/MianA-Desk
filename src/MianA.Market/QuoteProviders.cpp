@@ -136,6 +136,28 @@ QuoteResult parseReplyText(Provider provider, const QString &positionId,
         (result.price - previousClose) / previousClose * 100.0;
     result.hasChange = true;
   }
+  if (MarketRules::marketKey(symbol) == QStringLiteral("CN")) {
+    const auto levels = [&](int start) {
+      QVector<BookLevel> book;
+      for (int i = 0; i < 5; ++i) {
+        const int offset = start + i * 2;
+        bool priceValid = false, volumeValid = false;
+        const double price = parts.value(offset + (provider == Provider::Sina ? 1 : 0))
+                                 .toDouble(&priceValid);
+        double volume = parts.value(offset + (provider == Provider::Sina ? 0 : 1))
+                            .toDouble(&volumeValid);
+        if (!priceValid || !volumeValid || !std::isfinite(price) ||
+            !std::isfinite(volume) || price < 0 || volume < 0)
+          return QVector<BookLevel>{};
+        if (provider == Provider::Sina)
+          volume /= 100.0;
+        book.push_back({price, volume});
+      }
+      return book;
+    };
+    result.bids = levels(provider == Provider::Tencent ? 9 : 10);
+    result.asks = levels(provider == Provider::Tencent ? 19 : 20);
+  }
   result.name = provider == Provider::Tencent ? parts.value(1) : parts.value(0);
   result.marketTimestamp =
       providerTimestamp(parts, MarketRules::marketKey(symbol));

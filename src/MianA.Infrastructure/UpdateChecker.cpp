@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
 
 namespace {
 const QUrl LatestReleaseUrl(QStringLiteral(
@@ -47,7 +48,13 @@ void UpdateChecker::check() {
                        QByteArrayLiteral("MianADesk/" MIANA_VERSION_STRING));
   request.setRawHeader(QByteArrayLiteral("Accept"),
                        QByteArrayLiteral("application/vnd.github+json"));
+  request.setTransferTimeout(10000);
   QNetworkReply *reply = m_network.get(request);
+  // Bound the entire check even when the server keeps sending small chunks.
+  QTimer::singleShot(15000, reply, [reply] {
+    if (reply->isRunning())
+      reply->abort();
+  });
   connect(reply, &QNetworkReply::finished, this, [this, reply] {
     m_checking = false;
     reply->deleteLater();

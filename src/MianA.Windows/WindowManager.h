@@ -2,6 +2,7 @@
 
 #include <QAbstractNativeEventFilter>
 #include <QHash>
+#include <QColor>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -25,7 +26,8 @@ public:
   void initializeTray();
   void watchWindow(QWindow *window);
   void refreshWindowStyle();
-  void setTrayState(bool floating, bool paused, bool autostart);
+  void setTrayState(bool floating);
+  [[nodiscard]] QColor sampleUnderlay(int x, int y, int width, int height) const;
 
   [[nodiscard]] bool autostartEnabled() const;
   bool setAutostart(bool enabled);
@@ -39,11 +41,9 @@ public:
 
 signals:
   void showRequested();
-  void showFullRequested();
+  void showWidgetRequested();
   void hotkeyActivated();
   void toggleFloatingRequested();
-  void togglePausedRequested();
-  void autostartRequested(bool enabled);
   void settingsRequested();
   void checkUpdatesRequested();
   void quitRequested();
