@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QAbstractNativeEventFilter>
-#include <QHash>
+#include <QColor>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -9,6 +9,7 @@
 #include <QVector>
 #include <memory>
 
+class QAction;
 class QLocalServer;
 class QLockFile;
 class QMenu;
@@ -25,7 +26,8 @@ public:
   void initializeTray();
   void watchWindow(QWindow *window);
   void refreshWindowStyle();
-  void setTrayState(bool floating, bool paused, bool autostart);
+  void setTrayState(bool floating);
+  [[nodiscard]] QColor sampleUnderlay(int x, int y, int width, int height) const;
 
   [[nodiscard]] bool autostartEnabled() const;
   bool setAutostart(bool enabled);
@@ -39,11 +41,9 @@ public:
 
 signals:
   void showRequested();
-  void showFullRequested();
+  void showWidgetRequested();
   void hotkeyActivated();
   void toggleFloatingRequested();
-  void togglePausedRequested();
-  void autostartRequested(bool enabled);
   void settingsRequested();
   void checkUpdatesRequested();
   void quitRequested();
@@ -60,7 +60,7 @@ private:
   std::unique_ptr<QLocalServer> m_server;
   QSystemTrayIcon *m_tray = nullptr;
   QMenu *m_trayMenu = nullptr;
-  QHash<QString, QObject *> m_trayActions;
+  QAction *m_floatingAction = nullptr;
   QVector<QPointer<QWindow>> m_windows;
   QTimer m_topmostTimer;
   QUrl m_updateUrl;

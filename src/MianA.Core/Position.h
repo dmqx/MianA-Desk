@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MianA.Core/Quote.h"
+
 #include <QDate>
 #include <QString>
 #include <QVector>
@@ -20,6 +22,8 @@ struct Position {
   double changePercent = 0.0;
   double previousClose = 0.0;
   bool hasChange = false;
+  QVector<BookLevel> bids;
+  QVector<BookLevel> asks;
   QVector<double> intraday;
   qint64 intradayMinute = 0;
   QVector<qint64> intradayMinutes;

@@ -73,13 +73,14 @@ qt_add_qml_module(MianADesk
     VERSION 1.0
     QML_FILES
         src/MianA.UI/qml/Main.qml
-        src/MianA.UI/qml/Views/MainWindow.qml
+        src/MianA.UI/qml/Views/WatchlistWindow.qml
         src/MianA.UI/qml/Views/CompactWindow.qml
         src/MianA.UI/qml/Views/FloatingWindow.qml
         src/MianA.UI/qml/Views/SettingsWindow.qml
         src/MianA.UI/qml/Views/PositionEditor.qml
+        src/MianA.UI/qml/Controls/ActionPanel.qml
+        src/MianA.UI/qml/Controls/DepthPanel.qml
         src/MianA.UI/qml/Controls/AppButton.qml
-        src/MianA.UI/qml/Controls/PositionCard.qml
         src/MianA.UI/qml/Controls/CompactCard.qml
         src/MianA.UI/qml/Controls/Sparkline.qml
     RESOURCES assets/miana_desk.ico assets/miana_desk.png
@@ -101,7 +102,21 @@ target_compile_definitions(MianADesk PRIVATE
     MIANA_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
     MIANA_VERSION_MINOR=${PROJECT_VERSION_MINOR}
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
 install(TARGETS MianADesk BUNDLE DESTINATION . RUNTIME DESTINATION .)
+
+if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+    include(InstallRequiredSystemLibraries)
+    if(NOT CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+        message(FATAL_ERROR "MSVC redistributable DLLs are required for the portable package.")
+    endif()
+endif()
 
 # Qt's generated Windows deploy script does not quote an executable path
 # containing spaces. Calling windeployqt directly keeps installation reliable

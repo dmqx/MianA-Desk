@@ -1,4 +1,4 @@
-# MianA Desk v1.3 single-file package
+# MianA Desk v2.0 single-file package
 cmake_minimum_required(VERSION 3.22)
 
 include(../cmake/MianAVersion.cmake)
@@ -72,5 +72,16 @@ target_link_options(MianADeskPackage PRIVATE
     $<$<CONFIG:Release>:/OPT:ICF>
 )
 set_target_properties(MianADeskPackage PROPERTIES OUTPUT_NAME "MianA Desk")
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(launcher-cache-test ../tests/launcher_cache_test.cpp)
+    target_include_directories(launcher-cache-test PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+    target_link_libraries(launcher-cache-test PRIVATE libzstd_static user32)
+    target_compile_definitions(launcher-cache-test PRIVATE UNICODE _UNICODE)
+    target_compile_options(launcher-cache-test PRIVATE /W4 /permissive- /utf-8 /EHsc)
+    add_test(NAME launcher-cache COMMAND launcher-cache-test)
+    set_tests_properties(launcher-cache PROPERTIES TIMEOUT 20)
+endif()
 
 install(TARGETS MianADeskPackage RUNTIME DESTINATION .)

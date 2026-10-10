@@ -155,18 +155,15 @@ void MarketService::requestIntraday(const QVector<QuoteRequest> &requests,
   for (qsizetype i = 0; i < requests.size(); ++i) {
     const auto &request = requests.at(i);
     const bool cn = MarketRules::marketKey(request.symbol) == QStringLiteral("CN");
-    QUrl url;
+    QNetworkRequest requestObject;
     if (cn) {
-      url = QUrl(QStringLiteral("https://web.ifzq.gtimg.cn/appstock/"
-                                "app/minute/query?code=%1")
-                     .arg(QuoteProviders::queryKey(Provider::Tencent, request.symbol)));
+      requestObject = configuredRequest(
+          QUrl(QStringLiteral("https://web.ifzq.gtimg.cn/appstock/"
+                              "app/minute/query?code=%1")
+                   .arg(QuoteProviders::queryKey(Provider::Tencent, request.symbol))));
     } else {
-      url = QUrl(QStringLiteral("https://query1.finance.yahoo.com/v8/"
-                                "finance/chart/%1?interval=1m&range=1d")
-                     .arg(QString::fromLatin1(
-                         QUrl::toPercentEncoding(QuoteProviders::queryKey(Provider::Yahoo, request.symbol)))));
+      requestObject = makeRequest(Provider::Yahoo, request.symbol);
     }
-    QNetworkRequest requestObject = configuredRequest(url);
     auto *reply = m_network.get(requestObject);
     m_replies.push_back(reply);
     connect(reply, &QNetworkReply::finished, this,
@@ -239,13 +236,7 @@ MarketService::providersFor(const QString &symbol) {
 QNetworkRequest MarketService::makeRequest(Provider provider,
                                            const QString &symbol) {
   QString url;
-  if (provider == Provider::Tencent) {
-    url = QStringLiteral("https://qt.gtimg.cn/q=%1")
-              .arg(QuoteProviders::queryKey(provider, symbol));
-  } else if (provider == Provider::Sina) {
-    url = QStringLiteral("https://hq.sinajs.cn/list=%1")
-              .arg(QuoteProviders::queryKey(provider, symbol));
-  } else if (provider == Provider::EastMoney) {
+  if (provider == Provider::EastMoney) {
     url = QStringLiteral("https://push2.eastmoney.com/api/qt/stock/"
                          "get?secid=%1&fields=f43,f57,f58,f59,f60,f124")
               .arg(QuoteProviders::queryKey(provider, symbol));
@@ -254,12 +245,7 @@ QNetworkRequest MarketService::makeRequest(Provider provider,
                          "%1?interval=1m&range=1d")
               .arg(QString::fromLatin1(QUrl::toPercentEncoding(QuoteProviders::queryKey(Provider::Yahoo, symbol))));
   }
-  const QByteArray referer =
-      provider == Provider::Tencent ? QByteArrayLiteral("https://gu.qq.com/")
-      : provider == Provider::Sina
-          ? QByteArrayLiteral("https://finance.sina.com.cn/")
-          : QByteArray{};
-  return configuredRequest(QUrl(url), referer);
+  return configuredRequest(QUrl(url));
 }
 
 QNetworkRequest MarketService::makeGroupedRequest(

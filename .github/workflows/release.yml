@@ -1,4 +1,4 @@
-# MianA Desk v1.3 release workflow
+# MianA Desk v2.0 release workflow
 name: Build Windows package
 
 on:
@@ -48,6 +48,12 @@ jobs:
       - name: Build application
         run: cmake --build --preset windows-msvc-release
 
+      - name: Check QML
+        run: cmake --build --preset windows-msvc-release --target all_qmllint
+
+      - name: Test application
+        run: ctest --test-dir .build -C Release --output-on-failure
+
       - name: Deploy application
         run: cmake --install .build --config Release --prefix dist/package
 
@@ -58,17 +64,29 @@ jobs:
           -DMIANA_DIST_DIR="${{ github.workspace }}/dist/package"
 
       - name: Build single-file package
-        run: cmake --build .package-build --config Release --target MianADeskPackage --parallel
+        run: cmake --build .package-build --config Release --target MianADeskPackage launcher-cache-test --parallel
+
+      - name: Test package cache
+        run: ctest --test-dir .package-build -C Release --output-on-failure
 
       - name: Stage artifact
+        id: artifact
         shell: powershell
-        run: Copy-Item ".package-build/Release/MianA Desk.exe" "dist/MianA-Desk-${{ github.ref_name }}.exe"
+        env:
+          MIANA_REF_NAME: ${{ github.ref_name }}
+        run: |
+          $suffix = $env:MIANA_REF_NAME -replace '[^A-Za-z0-9._-]', '-'
+          $name = "MianA-Desk-$suffix"
+          $path = "dist/$name.exe"
+          Copy-Item ".package-build/Release/MianA Desk.exe" $path
+          "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MianA-Desk-${{ github.ref_name }}
-          path: dist/MianA-Desk-${{ github.ref_name }}.exe
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
           if-no-files-found: error
 
       - name: Create GitHub release
@@ -76,11 +94,13 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ARTIFACT_PATH: ${{ steps.artifact.outputs.path }}
         run: |
-          $notes = "Release MianA Desk v1.3"
-          if (gh release view "${{ github.ref_name }}" 2>$null) {
-            gh release edit "${{ github.ref_name }}" --title "MianA Desk ${{ github.ref_name }}" --notes $notes
-            gh release upload "${{ github.ref_name }}" "dist/MianA-Desk-${{ github.ref_name }}.exe" --clobber
+          $notes = "Release MianA Desk v2.0"
+          if (gh release view $env:RELEASE_TAG 2>$null) {
+            gh release edit $env:RELEASE_TAG --title "MianA Desk $env:RELEASE_TAG" --notes $notes
+            gh release upload $env:RELEASE_TAG $env:ARTIFACT_PATH --clobber
           } else {
-            gh release create "${{ github.ref_name }}" "dist/MianA-Desk-${{ github.ref_name }}.exe" --title "MianA Desk ${{ github.ref_name }}" --notes $notes
+            gh release create $env:RELEASE_TAG $env:ARTIFACT_PATH --title "MianA Desk $env:RELEASE_TAG" --notes $notes
           }

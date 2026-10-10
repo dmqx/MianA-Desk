@@ -17,7 +17,9 @@
 ## 功能
 
 * 支持 A 股、港股、美股行情与自选股管理
-* 支持完整、折叠、浮窗三种显示模式
+* 支持主界面与浮窗模式切换，双击浮窗即可返回主界面
+* 支持买卖五档行情查看，双击股票即可显示买卖五档报价
+* 支持侧边扩展面板快捷操作，通过「编辑自选」统一管理自选股的添加、修改与删除
 * 支持透明主题、桌面取色等个性化外观设置
 * 支持 Windows 原生圆角与阴影效果
 
@@ -51,7 +53,7 @@ src/
 
 前往 [MianA Desk Releases](https://github.com/dmqx/MianA-Desk/releases) 下载最新版本。
 
-下载 `MianA-Desk-v1.3.exe` 后直接运行，无需安装。
+下载 `MianA-Desk-v2.0.exe` 后直接运行，无需安装。
 
 ### 源码构建
 
@@ -67,6 +69,8 @@ src/
 ```powershell
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release
+cmake --build --preset windows-msvc-release --target all_qmllint
+ctest --test-dir .build -C Release --output-on-failure
 cmake --install .build --config Release --prefix dist/qt
 
 cmake -S packaging -B .package-build `
@@ -76,14 +80,18 @@ cmake -S packaging -B .package-build `
 
 cmake --build .package-build `
   --config Release `
-  --target MianADeskPackage
+  --target MianADeskPackage launcher-cache-test
+ctest --test-dir .package-build -C Release --output-on-failure
+
+New-Item -ItemType Directory -Force release | Out-Null
+Copy-Item ".package-build/Release/MianA Desk.exe" "release/MianA-Desk-v2.0.exe"
 ```
 
 生成文件：
 
 ```text
 .package-build/Release/MianA Desk.exe
-release/MianA-Desk-v1.3.exe
+release/MianA-Desk-v2.0.exe
 ```
 
 如果 CMake 无法自动找到 Qt：
@@ -93,4 +101,4 @@ cmake --preset windows-msvc-release `
   -DCMAKE_PREFIX_PATH="C:/Qt/6.11.2/msvc2022_64"
 ```
 
-安装阶段会自动运行 `windeployqt`，并移除未使用的插件、主题、翻译、软件 OpenGL 及开发文件。打包器使用 Zstandard 压缩完整部署目录并嵌入可执行文件。
+安装阶段会自动运行 `windeployqt`，随包部署 MSVC 运行库 DLL，并移除未使用的插件、主题、翻译、软件 OpenGL 及开发文件。

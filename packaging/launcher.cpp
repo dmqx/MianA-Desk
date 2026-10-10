@@ -18,6 +18,28 @@
 namespace {
 constexpr int PayloadResource = 101;
 
+struct CacheLock {
+  HANDLE handle;
+  bool acquired = false;
+
+  explicit CacheLock(const std::wstring &identity)
+      : handle(CreateMutexW(nullptr, FALSE,
+                            (L"Local\\MianADesk.Cache." + identity).c_str())) {
+    if (handle) {
+      const DWORD result = WaitForSingleObject(handle, INFINITE);
+      acquired = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
+    }
+  }
+  CacheLock(const CacheLock &) = delete;
+  CacheLock &operator=(const CacheLock &) = delete;
+  ~CacheLock() {
+    if (acquired)
+      ReleaseMutex(handle);
+    if (handle)
+      CloseHandle(handle);
+  }
+};
+
 void showError(const wchar_t *message) {
   MessageBoxW(nullptr, message, L"MianA Desk", MB_OK | MB_ICONERROR);
 }
@@ -132,6 +154,51 @@ bool extractPayload(const void *payload, DWORD payloadSize,
   return offset == archive.size();
 }
 
+const wchar_t *prepareCache(const void *payload, DWORD payloadSize,
+                            const std::filesystem::path &cacheDirectory) {
+  const CacheLock lock(cacheDirectory.filename().wstring());
+  if (!lock.acquired)
+    return L"无法锁定程序缓存目录。";
+
+  const auto application = cacheDirectory / L"MianADesk.exe";
+  const auto completionMarker = cacheDirectory / L".complete";
+  if (std::filesystem::exists(application) &&
+      std::filesystem::exists(completionMarker))
+    return nullptr;
+
+  const auto cacheRoot = cacheDirectory.parent_path();
+  std::error_code error;
+  std::filesystem::create_directories(cacheRoot, error);
+  if (error)
+    return L"无法创建程序缓存目录。";
+  std::filesystem::remove_all(cacheDirectory, error);
+  if (error)
+    return L"无法清理程序缓存目录。";
+  const auto staging =
+      cacheRoot / (L"staging-" + std::to_wstring(GetCurrentProcessId()));
+  std::filesystem::remove_all(staging, error);
+  if (error)
+    return L"无法清理程序缓存目录。";
+  std::filesystem::create_directories(staging, error);
+  if (error || !extractPayload(payload, payloadSize, staging)) {
+    std::filesystem::remove_all(staging, error);
+    return L"无法解压程序运行包。";
+  }
+  std::ofstream marker(staging / L".complete", std::ios::binary);
+  marker << "MianA Desk Zstandard package";
+  marker.close();
+  if (!marker) {
+    std::filesystem::remove_all(staging, error);
+    return L"无法完成程序缓存更新。";
+  }
+  std::filesystem::rename(staging, cacheDirectory, error);
+  if (error) {
+    std::filesystem::remove_all(staging, error);
+    return L"无法完成程序缓存更新。";
+  }
+  return nullptr;
+}
+
 bool launch(const std::filesystem::path &application,
             const std::filesystem::path &workingDirectory) {
   STARTUPINFOW startup{};
@@ -170,40 +237,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
       std::filesystem::path(localAppData) / L"MianA/MianADesk/cache";
   const auto cacheDirectory = cacheRoot / payloadIdentity(payload, payloadSize);
   const auto application = cacheDirectory / L"MianADesk.exe";
-  const auto completionMarker = cacheDirectory / L".complete";
-  std::error_code error;
-
-  if (!std::filesystem::exists(application) ||
-      !std::filesystem::exists(completionMarker)) {
-    std::filesystem::create_directories(cacheRoot, error);
-    if (error) {
-      showError(L"无法创建程序缓存目录。");
-      return 1;
-    }
-    std::filesystem::remove_all(cacheDirectory, error);
-    error.clear();
-    const auto staging =
-        cacheRoot / (L"staging-" + std::to_wstring(GetCurrentProcessId()));
-    std::filesystem::remove_all(staging, error);
-    error.clear();
-    std::filesystem::create_directories(staging, error);
-    if (error || !extractPayload(payload, payloadSize, staging)) {
-      showError(L"无法解压程序运行包。");
-      std::filesystem::remove_all(staging, error);
-      return 1;
-    }
-    {
-      std::ofstream marker(staging / L".complete", std::ios::binary);
-      marker << "MianA Desk Zstandard package";
-    }
-    std::filesystem::rename(staging, cacheDirectory, error);
-    if (error && (!std::filesystem::exists(application) ||
-                  !std::filesystem::exists(completionMarker))) {
-      showError(L"无法完成程序缓存更新。");
-      std::filesystem::remove_all(staging, error);
-      return 1;
-    }
-    std::filesystem::remove_all(staging, error);
+  if (const wchar_t *error = prepareCache(payload, payloadSize, cacheDirectory)) {
+    showError(error);
+    return 1;
   }
 
   const auto self = executablePath();

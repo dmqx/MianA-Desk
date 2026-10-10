@@ -35,6 +35,8 @@ QString normalizeSymbol(const QString &raw) {
 
   static const QRegularExpression sixDigits(QStringLiteral("^[0-9]{6}$"));
   if (sixDigits.match(value).hasMatch()) {
+    if (value.startsWith(QStringLiteral("920")))
+      return value + QStringLiteral(".BJ");
     if (QStringLiteral("659").contains(value.front()))
       return value + QStringLiteral(".SS");
     if (QStringLiteral("0123").contains(value.front()))

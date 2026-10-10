@@ -13,9 +13,9 @@ Window {
     property bool hideBorderShadow: controller.hideBorderShadow
     required property Window mainWindow
     property string editingId: ""
-    readonly property int pageWidth: 232
-    readonly property int pageHeight: 222
-    readonly property int titleBarHeight: 40
+    readonly property int pageWidth: mainWindow.width
+    readonly property int pageHeight: titleBarHeight + formPanel.implicitHeight + 38
+    readonly property int titleBarHeight: 32
     readonly property color inputBorderColor: "#A6A6A6"
     readonly property color inputFocusBorderColor: "#707A82"
     visible: false
@@ -28,6 +28,31 @@ Window {
         | Qt.Tool | Qt.WindowStaysOnTopHint
     width: pageWidth
     height: pageHeight
+    onHeightChanged: if (visible) y = Math.round(Math.max(Screen.virtualY + 8,
+        Math.min(y, Screen.virtualY + Screen.desktopAvailableHeight - height - 8)))
+
+    component PositionField: Basic.TextField {
+        id: field
+        Layout.fillWidth: true
+        Layout.preferredHeight: 24
+        placeholderTextColor: dialog.controller.paletteHint
+        color: dialog.controller.paletteText
+        font.family: "Microsoft YaHei UI"
+        font.pixelSize: 9
+        selectByMouse: true
+        leftPadding: 8
+        rightPadding: 8
+        verticalAlignment: TextInput.AlignVCenter
+        selectionColor: dialog.controller.paletteMuted
+        selectedTextColor: dialog.controller.paletteBg
+        background: Rectangle {
+            color: dialog.controller.paletteBg
+            radius: 7
+            border.width: 1
+            border.color: field.activeFocus ? dialog.inputFocusBorderColor : dialog.inputBorderColor
+        }
+        onAccepted: dialog.submit()
+    }
 
     function openForAdd() {
         editingId = ""
@@ -81,9 +106,7 @@ Window {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
-        anchors.bottomMargin: 14
+        anchors.bottomMargin: 6
         anchors.topMargin: 0
         spacing: 0
 
@@ -92,95 +115,48 @@ Window {
             Layout.preferredHeight: dialog.titleBarHeight
             RowLayout {
                 anchors.fill: parent
-                spacing: 6
-                ColumnLayout {
-                    spacing: 1
-                    Layout.fillWidth: true
-                    Layout.topMargin: 6
-                    Label { text: dialog.editingId ? "编辑自选" : "添加自选"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 13; font.bold: true }
-                    Label { text: "填写股票代码，名称可留空自动获取"; color: dialog.controller.paletteMuted; font.family: "Microsoft YaHei UI"; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
-                }
-                Components.AppButton { variant: Components.AppButton.Title;
-                    controller: dialog.controller
-                    id: editorClose
-                    text: "×"
-                    Layout.alignment: Qt.AlignTop | Qt.AlignRight
-                    Layout.topMargin: 2
-                    Layout.rightMargin: -8
-                    z: 2
-                    onClicked: dialog.close()
-                }
+                anchors.leftMargin: 8
+                anchors.rightMargin: 7
+                Label { text: dialog.editingId ? "编辑自选" : "添加自选"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 10; font.bold: true; Layout.fillWidth: true }
+                Components.AppButton { variant: Components.AppButton.Title; controller: dialog.controller; text: "×"; onClicked: dialog.close() }
             }
             DragHandler { target: null; onActiveChanged: if (active) dialog.startSystemMove() }
         }
 
-        Item { Layout.preferredHeight: 6 }
+        Item { Layout.preferredHeight: 4 }
         Rectangle {
+            id: formPanel
+            implicitHeight: formFields.implicitHeight + 12
             Layout.fillWidth: true
-            Layout.preferredHeight: 126
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.preferredHeight: implicitHeight
             radius: 8
             color: dialog.controller.palettePanel
             ColumnLayout {
+                id: formFields
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 11
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
-                spacing: 4
-                Label { text: "股票代码"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 12; font.bold: true }
-                Basic.TextField {
-                    id: symbolField
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    placeholderTextColor: dialog.controller.paletteHint
-                    color: dialog.controller.paletteText
-                    font.family: "Microsoft YaHei UI"
-                    selectByMouse: true
-                    leftPadding: 10
-                    rightPadding: 10
-                    verticalAlignment: TextInput.AlignVCenter
-                    selectionColor: dialog.controller.paletteMuted
-                    selectedTextColor: dialog.controller.paletteBg
-                    background: Rectangle {
-                        color: dialog.controller.paletteBg
-                        radius: 7
-                        border.width: 1
-                        border.color: symbolField.activeFocus ? dialog.inputFocusBorderColor : dialog.inputBorderColor
-                    }
-                    onAccepted: dialog.submit()
-                }
-                Label { text: "股票名称"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 12; font.bold: true; Layout.topMargin: 4 }
-                Basic.TextField {
-                    id: nameField
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    placeholderTextColor: dialog.controller.paletteHint
-                    color: dialog.controller.paletteText
-                    font.family: "Microsoft YaHei UI"
-                    selectByMouse: true
-                    leftPadding: 10
-                    rightPadding: 10
-                    verticalAlignment: TextInput.AlignVCenter
-                    selectionColor: dialog.controller.paletteMuted
-                    selectedTextColor: dialog.controller.paletteBg
-                    background: Rectangle {
-                        color: dialog.controller.paletteBg
-                        radius: 7
-                        border.width: 1
-                        border.color: nameField.activeFocus ? dialog.inputFocusBorderColor : dialog.inputBorderColor
-                    }
-                    onAccepted: dialog.submit()
-                }
-                Label { id: errorText; color: dialog.controller.paletteWarning; visible: text.length > 0; Layout.fillWidth: true; font.pixelSize: 10; elide: Text.ElideRight }
+                anchors.leftMargin: 6
+                anchors.rightMargin: 6
+                anchors.topMargin: 6
+                anchors.bottomMargin: 6
+                spacing: 2
+                Label { text: "股票代码"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 9; font.bold: true }
+                PositionField { id: symbolField }
+                Label { text: "股票名称（可留空）"; color: dialog.controller.paletteText; font.family: "Microsoft YaHei UI"; font.pixelSize: 9; font.bold: true; Layout.topMargin: 2 }
+                PositionField { id: nameField }
+                Label { id: errorText; color: dialog.controller.paletteWarning; visible: text.length > 0; Layout.fillWidth: true; font.pixelSize: 9; elide: Text.ElideRight }
             }
         }
 
-        Item { Layout.preferredHeight: 6 }
+        Item { Layout.preferredHeight: 4 }
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
             Item { Layout.fillWidth: true }
-            Components.AppButton { variant: Components.AppButton.Neutral; controller: dialog.controller; text: "保存"; prominent: true; onClicked: dialog.submit() }
-            Components.AppButton { variant: Components.AppButton.Neutral; controller: dialog.controller; text: "取消"; onClicked: dialog.close() }
+            Components.AppButton { variant: Components.AppButton.Neutral; controller: dialog.controller; implicitHeight: 24; text: "保存"; prominent: true; onClicked: dialog.submit() }
+            Components.AppButton { variant: Components.AppButton.Neutral; controller: dialog.controller; implicitHeight: 24; text: "取消"; onClicked: dialog.close() }
         }
     }
 
